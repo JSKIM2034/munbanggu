@@ -308,7 +308,7 @@ func _ready() -> void:
 	if shot_mode != "":
 		_setup_shot()
 	_prewarm()
-	var bt := "%s %d학년" % [Save.STAGES[stage]["name"], grade]
+	var bt := "%s %d단계" % [Save.STAGES[stage]["name"], grade]
 	if day_mod != "normal":
 		bt += "\n오늘은 " + Save.DAY_MODS[day_mod]["name"] + "!"
 	if weekly:
@@ -1499,7 +1499,7 @@ func combo_mult() -> float:
 	return 1.0 + minf(0.6, float(combo / 25) * 0.05)
 
 func dmg_mult() -> float:
-	return (1.0 + 0.15 * lv("bottle")) * (1.0 + 0.08 * Save.shop_lv("dmg"))
+	return (1.0 + 0.15 * lv("bottle")) * (1.0 + 0.08 * Save.shop_lv("dmg")) * float(Save.CHARS[char_id].get("power", 1.0))
 func crit_chance() -> float:
 	return 0.12 + 0.03 * Save.shop_lv("luck") + (0.08 if char_id == "younghee" else 0.0)
 func xp_mult() -> float:
@@ -1508,7 +1508,8 @@ func coin_mult() -> float:
 	return (1.0 + 0.1 * Save.shop_lv("coin")) * (1.0 + 0.35 * (grade - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.8) * {"rain": 1.2, "sports": 1.2, "vacation": 1.3}.get(day_mod, 1.0)
 const STAGE_MULT := {"ground": 1.0, "hall": 1.45, "lab": 2.0, "toilet": 2.5, "roof": 3.0, "music": 3.6}
 func grade_hp() -> float:
-	return (1.0 + 0.45 * (grade - 1)) * STAGE_MULT[stage]
+	var g := float(grade - 1)
+	return (1.0 + 0.45 * g + 0.02 * g * g) * STAGE_MULT[stage]
 func area_mult() -> float:
 	return 1.0 + 0.15 * lv("notebook")
 func cd_mult() -> float:
@@ -1622,7 +1623,7 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 		hpv = k["hp"] * grade_hp()
 	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
 		"squash": 0.0, "phase": rng.randf() * TAU, "spawn": 0.0, "dead": -1.0, "slow": 0.0, "elite": elite,
-		"speed": k["speed"] * (1.0 + t * 0.3) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
+		"speed": k["speed"] * (1.0 + t * 0.3) * (1.0 + minf(0.4, 0.02 * (grade - 1))) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
 		"dash": rng.randf_range(1.5, 3.5), "dash_t": 0.0, "summon": 3.0}
 	if k.has("prop"):
 		e["prop"] = true

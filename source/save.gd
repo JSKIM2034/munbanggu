@@ -26,32 +26,32 @@ const DAY_MODS := {
 	"exam": {"name": "시험 기간", "desc": "보스가 1분 일찍 와요. 대신 경험치 +30%", "col": "#e8524a"},
 	"vacation": {"name": "방학", "desc": "밤의 학교! 손전등으로 버텨요. 동전 +30%", "col": "#4a4fa8"},
 }
-const MAX_GRADE := 6
+const MAX_GRADE := 99
 
 const CHARS := {
-	"chulsoo": {"name": "철수", "weapon": "gun", "perk": "물총 피해 +10%", "unlock": "", "col": "#4fa8e8", "icon": "철"},
-	"younghee": {"name": "영희", "weapon": "ddakji", "perk": "치명타 확률 +8%", "unlock": "kills500", "col": "#ff7aa8", "icon": "영"},
-	"minsu": {"name": "민수", "weapon": "yoyo", "perk": "경험치 +15%", "unlock": "evo1", "col": "#2fc79a", "icon": "민"},
-	"sunja": {"name": "순자", "weapon": "rubber", "perk": "최대 하트 +2", "unlock": "clear_ground", "col": "#ff9a2f", "icon": "순"},
+	"chulsoo": {"name": "철수", "weapon": "gun", "perk": "물총 피해 +10%", "unlock": "", "col": "#4fa8e8", "icon": "철", "power": 1.0, "price": 0},
+	"younghee": {"name": "영희", "weapon": "ddakji", "perk": "치명타 확률 +8%", "unlock": "kills500", "col": "#ff7aa8", "icon": "영", "power": 1.2, "price": 900},
+	"minsu": {"name": "민수", "weapon": "yoyo", "perk": "경험치 +15%", "unlock": "evo1", "col": "#2fc79a", "icon": "민", "power": 1.4, "price": 1800},
+	"sunja": {"name": "순자", "weapon": "rubber", "perk": "최대 하트 +2", "unlock": "clear_ground", "col": "#ff9a2f", "icon": "순", "power": 1.6, "price": 3000},
 }
 const CHAR_ORDER := ["chulsoo", "younghee", "minsu", "sunja"]
 
 const SHOP := [
-	{"id": "w_gun", "name": "물총 강화", "icon": "물", "desc": "물총 피해 +12%, 연사 +4%", "cost": [50, 110, 220, 400, 650], "col": "#4fa8e8"},
-	{"id": "w_ddakji", "name": "딱지 강화", "icon": "딱", "desc": "딱지 피해 +12%, 회전 +4%", "cost": [50, 110, 220, 400, 650], "col": "#ff7aa8"},
-	{"id": "w_yoyo", "name": "요요 강화", "icon": "요", "desc": "요요 피해 +12%, 대기 -4%", "cost": [50, 110, 220, 400, 650], "col": "#2fc79a"},
-	{"id": "w_plane", "name": "종이비행기 강화", "icon": "비", "desc": "비행기 피해 +12%, 대기 -4%", "cost": [60, 130, 250, 450, 700], "col": "#7fa8ff"},
-	{"id": "w_pop", "name": "콩알탄 강화", "icon": "콩", "desc": "콩알탄 피해 +12%, 대기 -4%", "cost": [60, 130, 250, 450, 700], "col": "#ff5c5c"},
-	{"id": "w_rubber", "name": "고무줄 강화", "icon": "줄", "desc": "고무줄 피해 +12%, 대기 -4%", "cost": [50, 110, 220, 400, 650], "col": "#ff9a2f"},
-	{"id": "dmg", "name": "힘센 손", "icon": "힘", "desc": "모든 피해 +8%", "cost": [30, 70, 140, 260, 450], "col": "#ff7a6b"},
-	{"id": "hp", "name": "튼튼 우유", "icon": "우", "desc": "최대 하트 +1", "cost": [60, 160, 320], "col": "#ff5c7a"},
-	{"id": "speed", "name": "빠른 발", "icon": "발", "desc": "이동 속도 +5%", "cost": [40, 100, 220], "col": "#f2c230"},
-	{"id": "magnet", "name": "큰 자석", "icon": "석", "desc": "딱지 줍는 거리 +15%", "cost": [30, 80, 180], "col": "#9b8cff"},
-	{"id": "xp", "name": "예습 공책", "icon": "예", "desc": "경험치 +6%", "cost": [60, 150, 300], "col": "#6ee0b0"},
-	{"id": "luck", "name": "행운 부적", "icon": "운", "desc": "치명타 +3%, 상자에서 더 많이", "cost": [80, 200, 400], "col": "#ffd23f"},
-	{"id": "coin", "name": "용돈", "icon": "돈", "desc": "동전 +10%", "cost": [50, 120, 250, 450, 700], "col": "#e8a93a"},
-	{"id": "reroll", "name": "다시 뽑기권", "icon": "뽑", "desc": "판마다 카드 다시 뽑기 +1번", "cost": [100, 250, 500], "col": "#58c6f2"},
-	{"id": "revive", "name": "오뚝이", "icon": "뚝", "desc": "판마다 1번 되살아나요", "cost": [600], "col": "#c9a8f0"},
+	{"id": "w_gun", "name": "물총 강화", "icon": "물", "desc": "물총 피해 +12%, 연사 +4%", "base": 50, "col": "#4fa8e8"},
+	{"id": "w_ddakji", "name": "딱지 강화", "icon": "딱", "desc": "딱지 피해 +12%, 회전 +4%", "base": 50, "col": "#ff7aa8"},
+	{"id": "w_yoyo", "name": "요요 강화", "icon": "요", "desc": "요요 피해 +12%, 대기 -4%", "base": 50, "col": "#2fc79a"},
+	{"id": "w_plane", "name": "종이비행기 강화", "icon": "비", "desc": "비행기 피해 +12%, 대기 -4%", "base": 60, "col": "#7fa8ff"},
+	{"id": "w_pop", "name": "콩알탄 강화", "icon": "콩", "desc": "콩알탄 피해 +12%, 대기 -4%", "base": 60, "col": "#ff5c5c"},
+	{"id": "w_rubber", "name": "고무줄 강화", "icon": "줄", "desc": "고무줄 피해 +12%, 대기 -4%", "base": 50, "col": "#ff9a2f"},
+	{"id": "dmg", "name": "힘센 손", "icon": "힘", "desc": "모든 피해 +8%", "base": 30, "col": "#ff7a6b"},
+	{"id": "hp", "name": "튼튼 우유", "icon": "우", "desc": "최대 하트 +1", "base": 60, "max": 10, "col": "#ff5c7a"},
+	{"id": "speed", "name": "빠른 발", "icon": "발", "desc": "이동 속도 +5%", "base": 40, "col": "#f2c230"},
+	{"id": "magnet", "name": "큰 자석", "icon": "석", "desc": "딱지 줍는 거리 +15%", "base": 30, "col": "#9b8cff"},
+	{"id": "xp", "name": "예습 공책", "icon": "예", "desc": "경험치 +6%", "base": 60, "col": "#6ee0b0"},
+	{"id": "luck", "name": "행운 부적", "icon": "운", "desc": "치명타 +3%, 상자에서 더 많이", "base": 80, "max": 15, "col": "#ffd23f"},
+	{"id": "coin", "name": "용돈", "icon": "돈", "desc": "동전 +10%", "base": 50, "col": "#e8a93a"},
+	{"id": "reroll", "name": "다시 뽑기권", "icon": "뽑", "desc": "판마다 카드 다시 뽑기 +1번", "base": 100, "max": 5, "col": "#58c6f2"},
+	{"id": "revive", "name": "오뚝이", "icon": "뚝", "desc": "판마다 1번 되살아나요", "base": 600, "max": 3, "col": "#c9a8f0"},
 ]
 
 const ACH := [
@@ -68,13 +68,16 @@ const ACH := [
 	{"id": "clear_ground", "name": "운동장 수호자", "desc": "운동장 보스 물리치기 (순자가 친구가 돼요)", "stat": "clear_ground", "goal": 1, "reward": 200},
 	{"id": "clear_hall", "name": "복도 수호자", "desc": "복도 보스 물리치기", "stat": "clear_hall", "goal": 1, "reward": 300},
 	{"id": "clear_lab", "name": "과학실 수호자", "desc": "과학실 보스 물리치기", "stat": "clear_lab", "goal": 1, "reward": 500},
-	{"id": "grade3", "name": "3학년 진급", "desc": "아무 곳이나 3학년 클리어", "stat": "best_grade", "goal": 3, "reward": 300},
-	{"id": "grade6", "name": "졸업!", "desc": "아무 곳이나 6학년 클리어", "stat": "best_grade", "goal": 6, "reward": 1500},
+	{"id": "grade3", "name": "3단계 돌파", "desc": "아무 곳이나 3단계 클리어", "stat": "best_grade", "goal": 3, "reward": 300},
+	{"id": "grade6", "name": "졸업!", "desc": "아무 곳이나 6단계 클리어", "stat": "best_grade", "goal": 6, "reward": 1500},
 	{"id": "clear_toilet", "name": "화장실 수호자", "desc": "화장실 보스 물리치기", "stat": "clear_toilet", "goal": 1, "reward": 700},
 	{"id": "clear_roof", "name": "옥상 수호자", "desc": "옥상 보스 물리치기", "stat": "clear_roof", "goal": 1, "reward": 900},
 	{"id": "clear_music", "name": "음악실 수호자", "desc": "음악실 보스 물리치기", "stat": "clear_music", "goal": 1, "reward": 1200},
 	{"id": "weekly1", "name": "도전자", "desc": "주간 도전 참가하기", "stat": "weekly_runs", "goal": 1, "reward": 100},
 	{"id": "gacha5", "name": "뽑기 중독", "desc": "문방구 뽑기통 5번 돌리기", "stat": "gacha_total", "goal": 5, "reward": 150},
+	{"id": "grade10", "name": "중학생 퇴마사", "desc": "아무 곳이나 10단계 클리어", "stat": "best_grade", "goal": 10, "reward": 3000},
+	{"id": "grade20", "name": "고등학생 퇴마사", "desc": "아무 곳이나 20단계 클리어", "stat": "best_grade", "goal": 20, "reward": 8000},
+	{"id": "grade50", "name": "전설의 선생님", "desc": "아무 곳이나 50단계 클리어", "stat": "best_grade", "goal": 50, "reward": 30000},
 	{"id": "friends4", "name": "퇴마단 결성", "desc": "친구 4명 모두 모으기", "stat": "friends", "goal": 4, "reward": 500},
 ]
 
@@ -158,10 +161,17 @@ func shop_item(id: String) -> Dictionary:
 			return s
 	return {}
 
+func shop_max(id: String) -> int:
+	return int(shop_item(id).get("max", -1))
+
 func shop_cost(id: String) -> int:
 	var s := shop_item(id)
 	var l := shop_lv(id)
-	return -1 if l >= s["cost"].size() else int(s["cost"][l])
+	var mx := shop_max(id)
+	if mx >= 0 and l >= mx:
+		return -1
+	# 강화할수록 조금씩 비싸져요 (끝은 없어요)
+	return int(round(float(s["base"]) * pow(1.28, l) + l * 10))
 
 func buy(id: String) -> bool:
 	var c := shop_cost(id)
@@ -217,9 +227,20 @@ func claim_ach(id: String) -> int:
 
 func char_unlocked(id: String) -> bool:
 	var u: String = CHARS[id]["unlock"]
-	if u == "":
+	if u == "" or data.get("bought_chars", []).has(id):
 		return true
 	return ach_done(ach_by_id(u))
+
+func buy_char(id: String) -> bool:
+	var price: int = CHARS[id]["price"]
+	if char_unlocked(id) or int(data["coins"]) < price:
+		return false
+	data["coins"] -= price
+	if not data.has("bought_chars"):
+		data["bought_chars"] = []
+	data["bought_chars"].append(id)
+	save_data()
+	return true
 
 func stage_unlocked(id: String) -> bool:
 	var need: String = STAGES[id]["need"]
@@ -374,7 +395,7 @@ func record_run(r: Dictionary) -> Dictionary:
 		if stage_unlocked(s) and not before_stages.has(s):
 			news.append("새 장소: " + STAGES[s]["name"] + "!")
 	if new_grade and int(r["grade"]) < MAX_GRADE:
-		news.append("%s %d학년이 열렸어요!" % [STAGES[r["stage"]]["name"], int(r["grade"]) + 1])
+		news.append("%s %d단계가 열렸어요!" % [STAGES[r["stage"]]["name"], int(r["grade"]) + 1])
 	if weekly_new:
 		news.append("주간 도전 최고 기록!")
 	return {"news": news}

@@ -277,26 +277,33 @@ func _stage() -> void:
 			lk.position = Vector2(30, 220)
 			continue
 		var mg := Save.max_grade(sid)
-		var gl := L("학년", 30, INK, row)
+		var gl := L("단계", 30, INK, row)
 		gl.position = Vector2(30, 196)
-		for g in range(1, Save.MAX_GRADE + 1):
-			var gb := B(str(g), Color("#ffb03f") if g == sel[sid] else Color("#c9bfd3"), 34)
-			gb.position = Vector2(110 + (g - 1) * 84, 182)
-			gb.size = Vector2(72, 72)
-			gb.disabled = g > mg
+		var ss: String = sid
+		for pair in [[-10, "-10"], [-1, "-"], [1, "+"], [10, "+10"]]:
+			var dv: int = pair[0]
+			var gb := B(pair[1], Color("#8a7a95") if dv < 0 else Color("#ffb03f"), 32)
+			var px: int = {-10: 100, -1: 196, 1: 400, 10: 480}[dv]
+			gb.position = Vector2(px, 182)
+			gb.size = Vector2(88 if absi(dv) == 10 else 72, 72)
+			var nv: int = clampi(sel[sid] + dv, 1, mg)
+			gb.disabled = nv == sel[sid]
 			row.add_child(gb)
-			var gg := g
-			var ss: String = sid
 			gb.pressed.connect(func():
-				sel[ss] = gg
-				main._play("pick", 1.0 + gg * 0.05, -5.0)
+				sel[ss] = nv
+				main._play("pick", 1.0 + minf(nv, 30) * 0.02, -5.0)
 				show_screen("stage"))
+		var gnum := L("%d단계" % sel[sid], 44, Color("#e8524a"), row, 0)
+		gnum.position = Vector2(282, 186)
+		var gmax := L("(최고 %d)" % mg, 22, SUB, row)
+		gmax.position = Vector2(580, 206)
 		var bk: String = "%s_%d" % [sid, sel[sid]]
 		var best: Dictionary = Save.data["best"].get(bk, {})
 		var rec := "아직 기록이 없어요"
 		if not best.is_empty():
 			rec = ("클리어 %d:%02d" if best.get("win", false) else "최고 %d:%02d 버팀") % [int(best["time"]) / 60, int(best["time"]) % 60]
-		var hint := "  |  귀신 체력 x%.2f  동전 x%.2f" % [1.0 + 0.45 * (sel[sid] - 1), 1.0 + 0.35 * (sel[sid] - 1)]
+		var g0: int = sel[sid] - 1
+		var hint := "  |  귀신 체력 x%.1f  동전 x%.1f" % [(1.0 + 0.45 * g0 + 0.02 * g0 * g0), 1.0 + 0.35 * g0]
 		var rl := L(rec + hint, 24, SUB, row)
 		rl.position = Vector2(30, 268)
 		var go := B("출발!", Color("#ff9a2f"), 40)
@@ -322,7 +329,7 @@ func _stage() -> void:
 	var wrow := _row(vb, 250, Color("#ffc928"), Color("#fff1b8"))
 	var wl := L("이번 주 도전 (특별 규칙)", 40, INK, wrow)
 	wl.position = Vector2(28, 16)
-	var wd := L("%s 2학년, %s를 빌려서, %s\n모두 같은 조건! 점수를 단톡방에 자랑해요" % [Save.STAGES[wc["stage"]]["name"], Save.CHARS[wc["char"]]["name"], Save.DAY_MODS[wc["mod"]]["name"]], 26, SUB, wrow)
+	var wd := L("%s 2단계, %s를 빌려서, %s\n모두 같은 조건! 점수를 단톡방에 자랑해요" % [Save.STAGES[wc["stage"]]["name"], Save.CHARS[wc["char"]]["name"], Save.DAY_MODS[wc["mod"]]["name"]], 26, SUB, wrow)
 	wd.position = Vector2(28, 76)
 	var wb := L("이번 주 최고 점수 %d" % Save.weekly_best(), 28, Color("#d08a00"), wrow)
 	wb.position = Vector2(28, 160)
@@ -346,18 +353,18 @@ func _shop() -> void:
 	for it in Save.SHOP:
 		var id: String = it["id"]
 		var lvl := Save.shop_lv(id)
-		var mx: int = it["cost"].size()
+		var mx := Save.shop_max(id)
 		var row := _row(vb, 170, Color(it["col"]))
 		main._badge(row, it["icon"], Color(it["col"]), 110, Vector2(22, 30))
 		var nm := L(it["name"], 40, INK, row)
 		nm.position = Vector2(150, 22)
-		var pips := ""
-		for i in mx:
-			pips += "★" if i < lvl else "☆"
-		var lv := L(pips, 30, Color("#ffb03f"), row)
-		lv.position = Vector2(150 + nm.get_minimum_size().x + 16, 30)
-		var ds := L(it["desc"], 28, SUB, row)
-		ds.position = Vector2(150, 92)
+		var pips := ("강화 +%d" % lvl) + (" / %d" % mx if mx >= 0 else "")
+		var lv := L(pips, 28, Color("#ff8a2f") if lvl > 0 else Color("#b9b0bf"), row)
+		lv.position = Vector2(150, 72)
+		var ds := L(it["desc"], 24, SUB, row)
+		ds.position = Vector2(150, 112)
+		ds.size = Vector2(330, 50)
+		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var cost := Save.shop_cost(id)
 		if cost < 0:
 			_right_btn(row, "다 샀어요", Color("#b9b0bf"), false, func(): pass)
@@ -372,12 +379,12 @@ func _shop() -> void:
 # ---------- 친구들 ----------
 func _friends() -> void:
 	var vb := _page("퇴마단 친구들")
-	var tip := L("친구마다 시작 무기와 특기가 달라요", 28, Color.WHITE, vb, 8)
+	var tip := L("늦게 오는 친구일수록 힘이 세요!", 28, Color.WHITE, vb, 8)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	for cid in Save.CHAR_ORDER:
 		var c: Dictionary = Save.CHARS[cid]
 		var open := Save.char_unlocked(cid)
-		var row := _row(vb, 200, Color(c["col"]) if open else Color("#9b8aa5"), CREAM if open else Color("#e9e2ee"))
+		var row := _row(vb, 220, Color(c["col"]) if open else Color("#9b8aa5"), CREAM if open else Color("#e9e2ee"))
 		main._badge(row, c["icon"] if open else "?", Color(c["col"]) if open else Color("#9b8aa5"), 130, Vector2(22, 34))
 		var nm := L(c["name"], 46, INK, row)
 		nm.position = Vector2(175, 22)
@@ -385,15 +392,27 @@ func _friends() -> void:
 		wp.position = Vector2(175, 86)
 		var pk := L("특기: " + c["perk"], 28, Color("#d08a00"), row)
 		pk.position = Vector2(175, 128)
+		var pw := L("기본 피해 x%.1f" % float(c["power"]), 26, Color("#e8524a"), row)
+		pw.position = Vector2(175, 166)
 		if not open:
 			var a: Dictionary = Save.ach_by_id(c["unlock"])
-			var lk := L("도장 '%s'\n받으면 와요" % a["name"], 24, Color("#8a7a95"), row)
-			lk.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+			var lk := L("도장 '%s'\n또는 동전으로" % a["name"], 22, Color("#8a7a95"), row)
+			lk.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 			lk.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			lk.offset_left = -250
+			lk.offset_left = -260
 			lk.offset_right = -24
-			lk.offset_top = -36
-			lk.offset_bottom = 36
+			lk.offset_top = 18
+			lk.offset_bottom = 80
+			var bcid: String = cid
+			var price: int = c["price"]
+			var buy_c := func():
+				if Save.buy_char(bcid):
+					main._play("coin", 1.0, -2.0)
+					main._play("evo", 1.0, -6.0)
+					show_screen("friends")
+			var bb := _right_btn(row, "동전 %d" % price, Color("#ffb03f"), int(Save.data["coins"]) >= price, buy_c, 190)
+			bb.offset_top = 10
+			bb.offset_bottom = 80
 		elif Save.data["char"] == cid:
 			_right_btn(row, "함께해요", Color("#2fc79a"), false, func(): pass, 170)
 		else:
