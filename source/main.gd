@@ -2782,10 +2782,14 @@ func _sync_draw() -> void:
 		var wob := 1.0 + 0.12 * sin(elapsed * 40.0 + i)
 		var basis := Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.62 * wob, 0.62 / wob, 3.4) * b["size"])
 		bm.set_instance_transform(i, Transform3D(basis, b["pos"]))
-		bm.set_instance_custom_data(i, Color(0.7, 0.92, 1.0, 0.95) if b["splash"] == 0.0 else Color(0.45, 0.78, 1.0, 0.97))
+		if evolved.has("gun"):
+			var hc := Color.from_hsv(fmod(elapsed * 0.7 + i * 0.13, 1.0), 0.45, 1.0, 0.97)
+			bm.set_instance_custom_data(i, hc)
+		else:
+			bm.set_instance_custom_data(i, Color(0.7, 0.92, 1.0, 0.95))
 		var bg: MultiMesh = mm["bglow"].multimesh
 		bg.set_instance_transform(i, Transform3D(Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.38, 0.38, 1.1) * b["size"]), b["pos"] - (b["dir"] as Vector3) * 0.25 * b["size"]))
-		bg.set_instance_custom_data(i, Color(0.15, 0.45, 0.9, 0.5))
+		bg.set_instance_custom_data(i, Color(0.9, 0.7, 0.3, 0.7) if evolved.has("gun") else Color(0.15, 0.45, 0.9, 0.5))
 	bm.visible_instance_count = bn
 	mm["bglow"].multimesh.visible_instance_count = bn
 	# 조각
@@ -2915,9 +2919,11 @@ func _process(delta: float) -> void:
 			cam_off = cam.position - player.position
 			for e in enemies:
 				e["hp"] = 99999.0
+		if shot_mode == "evocine" and shot_frames in [40, 60, 90, 185, 200]:
+			get_viewport().get_texture().get_image().save_png("/tmp/evc_%d.png" % shot_frames)
 		if shot_mode == "allw" and (shot_frames in [40, 55] or (shot_frames >= 14 and shot_frames <= 40 and bullets.size() > 0 and shot_frames % 2 == 0)):
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_allw_%d.png" % shot_frames)
-		if shot_frames == (34 if shot_mode == "boss" else (70 if shot_mode == "allw" else (32 if shot_mode == "kills" else 110))) and perf_frames == 0:
+		if shot_frames == (34 if shot_mode == "boss" else (70 if shot_mode == "allw" else (32 if shot_mode == "kills" else (205 if shot_mode == "evocine" else 110)))) and perf_frames == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_%s.png" % shot_mode)
 			get_tree().quit()
 	if perf_frames > 0 and Engine.get_process_frames() % 60 == 0:
@@ -2933,6 +2939,9 @@ func _process(delta: float) -> void:
 		hitstop_left -= dt
 		_update_camera(dt)
 		return
+	if evo_cine > 0.0:
+		_evo_cine_step(dt)
+		return
 	if paused or game_over:
 		_update_camera(dt)
 		_update_fx(dt)
@@ -2940,6 +2949,7 @@ func _process(delta: float) -> void:
 		_update_hud()
 		return
 	elapsed += dt
+	_evo_aura(dt)
 	if boss_spawned and not boss.is_empty() and elapsed > boss_time + 60.0:
 		boss["speed"] = KINDS["boss"]["speed"] * 2.0   # 1분 안에 못 잡으면 화나요
 	_read_input()
@@ -3680,7 +3690,8 @@ func _apply_card(c: Dictionary, from_chest := false) -> void:
 	match c["type"]:
 		"evo":
 			evolved[id] = true
-			_evo_fx()
+			if not from_chest or true:
+				call_deferred("_evo_cinematic", id)
 		"main":
 			if not mains.has(id):
 				main_order.append(id)
@@ -3800,6 +3811,185 @@ func _card_info(c: Dictionary) -> Dictionary:
 			var d: Dictionary = SUPPORTS[c["id"]]
 			info = {"name": d["name"], "desc": d["desc"], "tag": "Lv.%d" % supports.get(c["id"], 0), "icon": d["icon"], "col": Color(d["col"]), "gold": false}
 	return info
+
+# ---------- 진화 연출: 멈춤, 확대, 번쩍, 빛줄기, 폭발 ----------
+var evo_cine := 0.0
+var evo_id := ""
+var evo_ui: CanvasLayer
+var evo_rays: Control
+var evo_boom_done := false
+const EVO_LEN := 2.6
+
+func _evo_cinematic(id: String) -> void:
+	evo_id = id
+	evo_cine = EVO_LEN
+	evo_boom_done = false
+	paused = true
+	stick_index = -1
+	stick_vec = Vector2.ZERO
+	if stick_base:
+		stick_base.visible = false
+	_play("evo", 1.0, 0.0)
+	_play("warn", 0.6, -6.0)
+	_vib(80)
+	if auto_play:
+		evo_cine = 0.01
+		return
+	var d: Dictionary = MAINS[id]
+	evo_ui = CanvasLayer.new()
+	evo_ui.layer = 15
+	add_child(evo_ui)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	evo_ui.add_child(root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.08, 0.02, 0.15, 0.0)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(dim)
+	dim.create_tween().tween_property(dim, "color:a", 0.55, 0.3)
+	# 회전하는 빛줄기
+	var vs := get_viewport().get_visible_rect().size
+	evo_rays = Control.new()
+	evo_rays.position = vs / 2.0
+	evo_rays.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(evo_rays)
+	for i in 16:
+		var r := ColorRect.new()
+		r.color = Color.from_hsv(float(i) / 16.0, 0.45, 1.0, 0.55) if i % 2 == 0 else Color(1, 0.95, 0.6, 0.45)
+		r.size = Vector2(1400, 46 if i % 2 == 0 else 22)
+		r.position = Vector2(0, -r.size.y / 2.0)
+		r.pivot_offset = Vector2(0, r.size.y / 2.0)
+		r.rotation = TAU * i / 16.0
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		evo_rays.add_child(r)
+	evo_rays.scale = Vector2(0.01, 0.01)
+	evo_rays.create_tween().tween_property(evo_rays, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# 큰 배지
+	var badge := _badge(root, d["icon"], Color("#ffc928"), 220, vs / 2.0 - Vector2(110, 260), true)
+	badge.pivot_offset = Vector2(110, 110)
+	badge.scale = Vector2(0.1, 0.1)
+	var bt := badge.create_tween()
+	bt.tween_property(badge, "scale", Vector2(1.3, 1.3), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	bt.tween_property(badge, "scale", Vector2.ONE, 0.2)
+	var t1 := _label("진화!", 120, Color("#ffdf3d"), root, 22)
+	t1.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t1.offset_left = -360
+	t1.offset_right = 360
+	t1.offset_top = -40
+	t1.offset_bottom = 110
+	t1.pivot_offset = Vector2(360, 75)
+	t1.scale = Vector2(3.0, 3.0)
+	t1.modulate.a = 0.0
+	var tt := t1.create_tween()
+	tt.tween_interval(0.25)
+	tt.tween_property(t1, "modulate:a", 1.0, 0.01)
+	tt.parallel().tween_property(t1, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var t2 := _label(d["evo"], 64, Color.WHITE, root, 16)
+	t2.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t2.offset_left = -360
+	t2.offset_right = 360
+	t2.offset_top = 110
+	t2.offset_bottom = 200
+	t2.modulate.a = 0.0
+	t2.create_tween().tween_interval(0.5)
+	t2.create_tween().tween_property(t2, "modulate:a", 1.0, 0.3).set_delay(0.5)
+	var t3 := _label(d["evo_desc"], 30, Color("#ffe9a8"), root, 10)
+	t3.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	t3.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t3.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t3.offset_left = -320
+	t3.offset_right = 320
+	t3.offset_top = 205
+	t3.offset_bottom = 300
+	t3.modulate.a = 0.0
+	t3.create_tween().tween_property(t3, "modulate:a", 1.0, 0.3).set_delay(0.75)
+	# 하얀 번쩍
+	var flash := ColorRect.new()
+	flash.color = Color(1, 1, 1, 1)
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(flash)
+	flash.create_tween().tween_property(flash, "color:a", 0.0, 0.45)
+
+func _evo_cine_step(dt: float) -> void:
+	evo_cine -= dt
+	var k := 1.0 - evo_cine / EVO_LEN
+	# 카메라가 철수에게 확 다가갔다가 돌아와요
+	var zoom := sin(clampf(k / 0.85, 0.0, 1.0) * PI)
+	var target := player.position + cam_off.lerp(Vector3(0, 3.2, 3.6), zoom * 0.85)
+	cam.position = cam.position.lerp(target, minf(1.0, dt * 8.0))
+	cam.look_at(player.position + Vector3(0, 0.7, 0), Vector3.UP)
+	if evo_rays:
+		evo_rays.rotation += dt * 1.6
+	# 철수 주변으로 빛이 빨려 들어가요
+	for i in 4:
+		var a := rng.randf() * TAU
+		var pp := player.position + Vector3(cos(a) * 3.0, rng.randf_range(0.2, 2.0), sin(a) * 3.0)
+		_glow(pp, (player.position + Vector3(0, 0.8, 0) - pp) * 3.5, Color.from_hsv(rng.randf(), 0.5, 1.0, 1.0), 0.13, 0.28)
+	if k > 0.15 and Engine.get_process_frames() % 6 == 0:
+		_ring(player.position, Color.from_hsv(fmod(k * 3.0, 1.0), 0.6, 1.0, 1.0), 0.2, 2.2, 0.4)
+	model.rotation.y += dt * (4.0 + k * 20.0)
+	recoil = 1.0
+	_animate_player(dt)
+	_update_fx(dt)
+	_sync_draw()
+	if evo_cine <= 0.0:
+		_evo_finish()
+
+func _evo_finish() -> void:
+	evo_cine = 0.0
+	if evo_ui:
+		evo_ui.queue_free()
+		evo_ui = null
+		evo_rays = null
+	cam.look_at(player.position, Vector3.UP)
+	cam.rotation = Vector3.ZERO
+	cam.look_at_from_position(cam.position, cam.position - cam_off, Vector3.UP)
+	_evo_fx()
+	_evo_boom()
+	paused = card_panel != null
+
+func _evo_boom() -> void:
+	# 진화 폭발: 주변 귀신 싹쓸이
+	shake = 0.9
+	hitstop(0.12)
+	_vib(200)
+	_play("blast", 0.6, 0.0)
+	_play("pop", 0.6, -2.0)
+	for i in 6:
+		_ring(player.position, Color.from_hsv(i / 6.0, 0.55, 1.0, 1.0), 0.3, 4.0 + i * 1.5, 0.5 + i * 0.12)
+	_glow(player.position + Vector3(0, 1, 0), Vector3.ZERO, Color(1, 1, 0.9, 1), 4.0, 0.3)
+	for i in 60:
+		var a := rng.randf() * TAU
+		var v := Vector3(cos(a), rng.randf_range(0.3, 1.6), sin(a)) * rng.randf_range(6, 13)
+		_glow(player.position + Vector3(0, 0.8, 0), v, Color.from_hsv(rng.randf(), 0.55, 1.0, 1.0), rng.randf_range(0.14, 0.26), rng.randf_range(0.6, 1.1), 8.0)
+	var confetti := [Color("#ff7aa8"), Color("#ffd23f"), Color("#6ee0b0"), Color("#58c6f2"), Color("#c9a8f0")]
+	for i in 50:
+		var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(1.0, 2.2), rng.randf_range(-1, 1)).normalized() * rng.randf_range(5, 10)
+		_part("star", player.position + Vector3(0, 1.0, 0), v, confetti[i % 5], 1.0, 1.4, rng.randf_range(-14, 14))
+	for e in enemies:
+		var d: Vector3 = e["pos"] - player.position
+		if d.length() < 9.0 and e["kind"] != "boss":
+			_hit_enemy(e, 120.0 + level * 6.0, d, 12.0, true)
+		elif e["kind"] == "boss":
+			_hit_enemy(e, 400.0, d, 3.0, true)
+
+func _evo_aura(dt: float) -> void:
+	# 진화한 무기가 있으면 발밑에 빛 고리와 반짝이가 늘 따라다녀요
+	var n := evolved.size()
+	if n == 0:
+		return
+	if Engine.get_process_frames() % maxi(2, 6 - n) == 0:
+		var a := elapsed * 3.0 + rng.randf() * TAU
+		var r := 0.9
+		_glow(player.position + Vector3(cos(a) * r, 0.15, sin(a) * r), Vector3(0, rng.randf_range(1.0, 2.5), 0),
+			Color.from_hsv(fmod(elapsed * 0.3 + rng.randf() * 0.2, 1.0), 0.45, 1.0, 0.8), 0.1, 0.6, -0.5)
+	if Engine.get_process_frames() % 50 == 0:
+		_ring(player.position, Color(1.0, 0.85, 0.35, 0.6), 0.6, 1.4, 0.8)
 
 func _evo_fx() -> void:
 	shake = 0.4
@@ -4094,6 +4284,12 @@ func _setup_shot() -> void:
 		_refresh_slots()
 	if shot_mode == "cards" or shot_mode == "evocard":
 		_level_up()
+	if shot_mode == "evocine":
+		mains["gun"] = 5
+		supports["bottle"] = 1
+		support_order.append("bottle")
+		_refresh_slots()
+		get_tree().create_timer(0.3).timeout.connect(func(): _apply_card({"type": "evo", "id": "gun"}))
 	if shot_mode == "kills":
 		enemies.clear()
 		for i in 30:
