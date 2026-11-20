@@ -108,14 +108,14 @@ const MAINS := {
 		"desc": ["고무줄이 쫙! 퍼지며 주변을 튕겨내요", "범위 +20%", "피해 +40%", "더 자주 퍼져요", "범위 +20%, 더 세게 튕겨요"]},
 }
 const SUPPORTS := {
-	"bottle": {"name": "생수병", "icon": "병", "col": "#58c6f2", "desc": "모든 공격 피해 +15%", "set": "gun"},
-	"notebook": {"name": "공책", "icon": "책", "col": "#b48ef0", "desc": "공격 범위,크기 +15%", "set": "ddakji"},
-	"watch": {"name": "계산기 시계", "icon": "시", "col": "#7cc95a", "desc": "공격 대기 시간 -8%", "set": "yoyo"},
-	"sneakers": {"name": "운동화", "icon": "신", "col": "#f2c230", "desc": "이동 속도 +10%", "set": "rubber"},
+	"bottle": {"name": "생수병", "icon": "병", "col": "#58c6f2", "desc": "피해 +15%, 가끔 물을 촤악 뿌려요", "set": "gun"},
+	"notebook": {"name": "공책", "icon": "책", "col": "#b48ef0", "desc": "범위 +15%, 공책 종이가 빙글빙글 돌아요", "set": "ddakji"},
+	"watch": {"name": "계산기 시계", "icon": "시", "col": "#7cc95a", "desc": "대기 시간 -8%, 띠띠! 주변 귀신이 느려져요", "set": "yoyo"},
+	"sneakers": {"name": "운동화", "icon": "신", "col": "#f2c230", "desc": "이동 속도 +10%, 반짝 발자국", "set": "rubber"},
 	"colorpaper": {"name": "색종이", "icon": "색", "col": "#6fd3ff", "desc": "색종이 별을 휙휙 던져요. 물줄기, 비행기, 콩알탄도 15% 빨라져요", "set": "plane"},
-	"magnifier": {"name": "돋보기", "icon": "돋", "col": "#ffb03f", "desc": "치명타 피해 +30%", "set": "pop"},
-	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "딱지 줍는 거리 +40%", "set": ""},
-	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "최대 하트 +1, 1칸 회복", "set": ""},
+	"magnifier": {"name": "돋보기", "icon": "돋", "col": "#ffb03f", "desc": "치명타 피해 +30%, 햇빛으로 귀신을 지져요", "set": "pop"},
+	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "줍는 거리 +40% (바닥에 원이 보여요)", "set": ""},
+	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "하트 +1, 하트 방패가 한 번 막아 줘요", "set": ""},
 }
 var mains := {"gun": 1}          # 이름 -> 레벨
 var supports := {}               # 이름 -> 레벨
@@ -312,6 +312,9 @@ func _ready() -> void:
 		_setup_shot()
 	_prewarm()
 	var bt := "%s %d단계" % [Save.STAGES[stage]["name"], grade]
+	var wd: Dictionary = Save.WEATHERS[weather]
+	if wd["desc"] != "":
+		bt += "\n" + wd["name"] + "! " + wd["desc"]
 	if day_mod != "normal":
 		bt += "\n오늘은 " + Save.DAY_MODS[day_mod]["name"] + "!"
 	if weekly:
@@ -647,6 +650,7 @@ func _make_world() -> void:
 		_: _world_ground()
 	_place_decor()
 	_apply_day_mod()
+	_apply_weather()
 	if mobile_web:
 		e_glow_off()
 
@@ -744,6 +748,149 @@ func _apply_day_mod() -> void:
 		env_ref.background_color = env_ref.background_color.darkened(0.35)
 		env_ref.ambient_light_color = Color("#c8d4e8")
 		sun_ref.light_energy *= 0.6
+		_make_puddles(9)
+
+# =========================================================
+# 단계별 날씨 / 학교 안 사건
+# =========================================================
+var weather := "sunny"
+var light_t := 6.0
+var flash_t := 0.0
+var strikes: Array = []
+var base_ambient := 1.0
+func _apply_weather() -> void:
+	weather = Save.weather_for(stage, grade)
+	if in_menu:
+		weather = "sunny"
+		return
+	base_ambient = env_ref.ambient_light_energy
+	match weather:
+		"sunset":
+			env_ref.background_color = Color("#f2905a")
+			env_ref.ambient_light_color = Color("#ffe0cc")
+			sun_ref.light_color = Color("#ffd6b8")
+			sun_ref.light_energy *= 0.9
+		"rain", "storm":
+			env_ref.background_color = env_ref.background_color.darkened(0.55)
+			env_ref.ambient_light_color = Color("#a8b8d8")
+			sun_ref.light_energy *= 0.45
+			env_ref.tonemap_exposure *= 0.8
+			if puddles.is_empty():
+				_make_puddles(9)
+			_sky_particles(Color(0.8, 0.9, 1.0, 0.75), Vector3(0.05, 1.1, 0.05), 22.0, 200 if not mobile_web else 110)
+		"snow":
+			env_ref.background_color = Color("#c8d8ec")
+			env_ref.ambient_light_color = Color("#e0ecff")
+			sun_ref.light_color = Color("#dfe9ff")
+			_sky_particles(Color(1, 1, 1, 0.95), Vector3(0.14, 0.14, 0.14), 2.5, 220 if not mobile_web else 120)
+			env_ref.tonemap_exposure *= 1.08
+		"cleaning":
+			if puddles.is_empty():
+				_make_puddles(10)
+		"night", "blackout", "midnight":
+			env_ref.background_color = Color("#0d0b1a")
+			env_ref.ambient_light_color = Color("#6f7fd8")
+			env_ref.ambient_light_energy = minf(env_ref.ambient_light_energy, 0.15)
+			sun_ref.light_energy = minf(sun_ref.light_energy, 0.12)
+			sun_ref.light_color = Color("#8fa0ff")
+			if stage != "lab":
+				env_ref.tonemap_exposure *= 0.6
+			if flashlight == null:
+				flashlight = OmniLight3D.new()
+				flashlight.omni_range = 8.5
+				flashlight.light_energy = 3.6
+				flashlight.light_color = Color("#fff1c9")
+				add_child(flashlight)
+			elif stage == "lab":
+				flashlight.omni_range = 6.8
+		"alarm":
+			env_ref.ambient_light_color = Color("#ffb0a8")
+	base_ambient = env_ref.ambient_light_energy
+
+func _sky_particles(col: Color, size: Vector3, speed: float, amount: int) -> void:
+	# 비나 눈: 카메라 주변에만 떨어지게 해서 가벼워요
+	var p := CPUParticles3D.new()
+	p.amount = amount
+	p.lifetime = 1.2 if speed > 10.0 else 4.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(10, 0.5, 12)
+	p.direction = Vector3(0.15, -1, 0)
+	p.spread = 4.0 if speed > 10.0 else 25.0
+	p.gravity = Vector3.ZERO
+	p.initial_velocity_min = speed * 0.8
+	p.initial_velocity_max = speed
+	if size.y > size.x * 2.0:
+		var bm := BoxMesh.new()
+		bm.size = size
+		p.mesh = bm
+	else:
+		var sm := SphereMesh.new()
+		sm.radius = size.x * 0.6
+		sm.height = size.x * 1.2
+		sm.radial_segments = 6
+		sm.rings = 3
+		p.mesh = sm
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = col
+	p.material_override = m
+	p.local_coords = false
+	add_child(p)
+	set_meta("sky_p", p)
+
+func weather_speed() -> float:
+	return {"snow": 0.85, "alarm": 1.12, "midnight": 1.05}.get(weather, 1.0)
+
+func weather_spawn() -> float:
+	return {"sunset": 1.1, "snow": 1.2, "alarm": 1.05}.get(weather, 1.0)
+
+func _weather_logic(dt: float) -> void:
+	if has_meta("sky_p"):
+		var sp: CPUParticles3D = get_meta("sky_p")
+		sp.position = player.position + Vector3(0, 9.0, -2.0)
+	if weather == "alarm":
+		var k := 0.5 + 0.5 * sin(elapsed * 6.0)
+		env_ref.ambient_light_color = Color(1.0, 0.75, 0.7).lerp(Color(1.0, 0.25, 0.2), k)
+		if fmod(elapsed, 12.0) < dt:
+			_play("warn", 0.9, -12.0)
+	# 번개: 빨간 동그라미 경고 뒤에 콰광! 철수도 귀신도 맞아요
+	if weather in ["storm", "thunder", "midnight"] and elapsed > 8.0:
+		light_t -= dt
+		if light_t <= 0.0:
+			light_t = rng.randf_range(6.0, 9.0) if weather != "midnight" else rng.randf_range(5.0, 7.5)
+			var n := 2 + (1 if dg > 15 else 0)
+			for i in n:
+				var off := Vector3.ZERO if i == 0 else Vector3(rng.randf_range(-5, 5), 0, rng.randf_range(-5, 5))
+				var sp2 := player.position + move_dir * move_speed() * 0.5 + off
+				sp2.x = clampf(sp2.x, -AX + 1, AX - 1)
+				sp2.z = clampf(sp2.z, -AZ + 1, AZ - 1)
+				_warn_circle(sp2, 1.4, 1.2 + i * 0.15)
+				strikes.append({"pos": sp2, "t": 1.2 + i * 0.15})
+	for st in strikes.duplicate():
+		st["t"] -= dt
+		if st["t"] <= 0.0:
+			strikes.erase(st)
+			var sp3: Vector3 = st["pos"]
+			var top := sp3 + Vector3(rng.randf_range(-1, 1), 12.0, -3.0)
+			var mid := sp3.lerp(top, 0.5) + Vector3(rng.randf_range(-0.8, 0.8), 0, rng.randf_range(-0.8, 0.8))
+			_bolt(top, mid)
+			_bolt(mid, sp3)
+			_ring(sp3, Color(1.0, 0.95, 0.5, 1.0), 0.3, 2.2, 0.35)
+			_sparkle(sp3 + Vector3(0, 0.3, 0), Color(1.0, 0.95, 0.5, 1.0), 10, 6.0, 0.12, 0.4)
+			flash_t = 0.18
+			shake = maxf(shake, 0.25)
+			_play("zap", 0.6, -2.0)
+			for e in enemies:
+				if e["dead"] < 0.0 and Vector2(e["pos"].x - sp3.x, e["pos"].z - sp3.z).length() < 1.4 + e["radius"]:
+					_hit_enemy(e, 60.0, e["pos"] - sp3, 6.0, true)
+	if flash_t > 0.0:
+		flash_t -= dt
+		env_ref.ambient_light_energy = base_ambient + 2.5 * maxf(flash_t, 0.0) / 0.18
+	elif weather in ["storm", "thunder", "midnight"]:
+		env_ref.ambient_light_energy = base_ambient
+
+func _make_puddles(count: int) -> void:
 		var pm := ShaderMaterial.new()
 		var sh := Shader.new()
 		sh.code = """
@@ -752,7 +899,7 @@ render_mode blend_mix, depth_draw_never, specular_schlick_ggx;
 void fragment(){ float d = length(UV - 0.5) * 2.0; ALBEDO = vec3(0.62,0.78,1.0); ROUGHNESS = 0.05; METALLIC = 0.1; float rim = smoothstep(0.75, 0.9, d) * (1.0 - smoothstep(0.9, 1.0, d)); ALBEDO += rim * 0.3; ALPHA = (1.0 - smoothstep(0.85, 1.0, d)) * 0.5; }
 """
 		pm.shader = sh
-		for i in 9:
+		for i in count:
 			var c := Vector3(rng.randf_range(-AX + 1, AX - 1), 0.02, rng.randf_range(-AZ + 1, AZ - 1))
 			var r := rng.randf_range(1.2, 2.2)
 			var q := PlaneMesh.new()
@@ -1595,9 +1742,9 @@ func rubber_stats() -> Dictionary:
 func _rubber_base() -> Dictionary:
 	var l := lv("rubber")
 	if evolved.has("rubber"):
-		return {"cool": 1.4, "radius": 4.2, "dmg": 24.0, "knock": 8.0, "double": true}
+		return {"cool": 1.4, "radius": 4.2, "dmg": 24.0, "knock": 15.0, "double": true}
 	return {"cool": 3.0 * (0.72 if l >= 4 else 1.0), "radius": 2.6 * (1.2 if l >= 2 else 1.0) * (1.2 if l >= 5 else 1.0),
-		"dmg": 12.0 * (1.4 if l >= 3 else 1.0), "knock": 7.0 if l >= 5 else 4.5, "double": false}
+		"dmg": 12.0 * (1.4 if l >= 3 else 1.0), "knock": 13.0 if l >= 5 else 10.0, "double": false}
 
 func proj_speed() -> float:
 	return 1.0 + 0.15 * lv("colorpaper")
@@ -1645,7 +1792,7 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 		hpv = k["hp"] * grade_hp()
 	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
 		"squash": 0.0, "phase": rng.randf() * TAU, "spawn": 0.0, "dead": -1.0, "slow": 0.0, "elite": elite,
-		"speed": k["speed"] * (1.0 + t * 0.3) * (1.0 + minf(0.4, 0.02 * (dg - 1))) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
+		"speed": k["speed"] * (1.0 + t * 0.3) * (1.0 + minf(0.4, 0.02 * (dg - 1))) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0) * weather_speed(), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
 		"dash": rng.randf_range(1.5, 3.5), "dash_t": 0.0, "summon": 3.0}
 	if k.has("prop"):
 		e["prop"] = true
@@ -1666,7 +1813,7 @@ func _spawn_logic(dt: float) -> void:
 		return
 	var t := elapsed / RUN_TIME
 	spawn_timer = lerpf(1.1, 0.3, clampf(t * 1.3, 0, 1))
-	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4))
+	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4) * weather_spawn())
 	if boss_spawned:
 		count = maxi(1, count / 3)
 	# 시간이 지날수록 센 귀신이 섞여요
@@ -2010,6 +2157,11 @@ func _update_enemies(dt: float) -> void:
 			if r.size() > 0:
 				want = r[0]
 				steer = r[1]
+		if float(e.get("push", 0.0)) > 0.0:
+			e["push"] -= dt
+			steer *= 0.12
+			if Engine.get_process_frames() % 4 == 0 and parts.size() < part_cap / 2:
+				_puff(e["pos"] + Vector3(0, 0.15, 0), 0.3, 0.3, Color(1, 0.95, 0.85, 0.5))
 		e["vel"] = (e["vel"] as Vector3).lerp(want, dt * steer)
 		e["pos"] += (e["vel"] + (wind * 1.6 if e["kind"] != "boss" else Vector3.ZERO)) * dt
 		if stage == "roof" and e["kind"] != "boss" and (absf(e["pos"].x) > AX + 0.7 or absf(e["pos"].z) > AZ + 0.7):
@@ -2027,7 +2179,7 @@ func _update_enemies(dt: float) -> void:
 		e["flash"] = maxf(0.0, e["flash"] - dt)
 		if obstacles.size() > 0:
 			e["pos"] = _push_out(e["pos"], e["radius"] * 0.8)
-		if dist < e["radius"] + 0.3 and hurt_timer <= 0.0 and not game_over and flee_t <= 0.0:
+		if dist < e["radius"] + 0.3 and hurt_timer <= 0.0 and not game_over and flee_t <= 0.0 and float(e.get("hop", 0.0)) < 0.5:
 			_player_hurt(e["pos"], 2 if e["kind"] == "boss" or e["elite"] else 1)
 	enemies = alive
 	# 서로 밀어내기
@@ -2071,13 +2223,18 @@ func _hit_enemy(e: Dictionary, dmg: float, dir: Vector3, knock := 5.0, quiet := 
 		if e.has("prop"):
 			resist = 0.0
 		e["vel"] = dir.normalized() * knock * resist
+		# 센 넉백(고무줄 등)은 잠깐 버티지 못하고 튕겨 나가요
+		if knock >= 8.0 and resist > 0.0:
+			e["push"] = 0.28 if e["kind"] != "boss" else 0.1
 	var pos: Vector3 = e["pos"]
 	_number(pos + Vector3(0, 1.3, 0), int(round(dmg)), crit)
 	_burst(pos + Vector3(0, 0.55, 0), Color(0.7, 0.9, 1.0, 0.9), 3, 3.0)
 	if not quiet:
 		_sparkle(pos + Vector3(0, 0.6, 0), Color(1.0, 0.95, 0.7, 0.9), 1, 3.5, 0.12, 0.25)
 	if crit:
-		_ring(pos, Color(1.0, 0.85, 0.2, 1.0), 0.2, 1.4, 0.35)
+		_ring(pos, Color(1.0, 0.85, 0.2, 1.0), 0.2, 1.4 + 0.2 * lv("magnifier"), 0.35)
+		if lv("magnifier") > 0 and not quiet:
+			_sparkle(pos + Vector3(0, 0.8, 0), Color(1.0, 0.8, 0.2, 1.0), 4, 5.0, 0.14, 0.35)
 		_burst(pos + Vector3(0, 0.7, 0), Color("#ffdf3d"), 6, 5.0, true)
 	if not quiet:
 		_play("hit", rng.randf_range(0.9, 1.15) + (0.25 if crit else 0.0), -5.0)
@@ -2180,7 +2337,22 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 		"walk":
 			if e["pat_t"] <= 0.0:
 				var pats := ["shoes", "charge", "rain", "summon", "shoes", "charge", "rain"]
+				# 등급 보스는 자기만의 새 공격을 섞어 써요
+				var ri := BOSS_RANKS.find(boss_rank())
+				if ri >= 1:
+					pats += ["spiral", "spiral"]
+				if ri >= 2:
+					pats += ["cross", "cross"]
+				if ri >= 3:
+					pats += ["jump", "jump"]
+				if ri >= 4:
+					pats += ["goldrain", "goldrain"]
+				if ri >= 5:
+					pats += ["nova", "nova", "nova"]
 				e["pat"] = pats[rng.randi() % pats.size()]
+				if ri >= 1 and e.get("last_pat", "") == e["pat"]:
+					e["pat"] = pats[rng.randi() % pats.size()]
+				e["last_pat"] = e["pat"]
 				if e["pat"] == "summon" and enemies.size() >= MAX_ENEMY - 12:
 					e["pat"] = "shoes"
 				e["pat_t"] = 0.7
@@ -2192,12 +2364,12 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 			# 부르르 떨다가 실내화를 사방으로 던져요
 			e["squash"] = 0.4 + 0.2 * sin(elapsed * 50.0)
 			if e["pat_t"] <= 0.0:
-				var n := 12 + dg + (4 if angry else 0)
+				var n := 12 + mini(dg, 16) + (4 if angry else 0)
 				var off := rng.randf() * TAU
 				for i in n:
 					var a := off + TAU * i / n
 					var dv := Vector3(cos(a), 0, sin(a))
-					eshots.append({"pos": e["pos"] + dv * 1.2 + Vector3(0, 0.6, 0), "vel": dv * (4.2 + 0.2 * dg), "life": 5.0, "rot": a})
+					eshots.append({"pos": e["pos"] + dv * 1.2 + Vector3(0, 0.6, 0), "vel": dv * (4.2 + 0.2 * mini(dg, 15)), "life": 5.0, "rot": a})
 				_play("blast", 0.7, -4.0)
 				shake = maxf(shake, 0.25)
 				e["stage"] += 1
@@ -2238,11 +2410,137 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 			return [Vector3.ZERO, 6.0]
 		"summon":
 			if e["pat_t"] <= 0.0:
-				for j in 6 + dg:
-					var a := TAU * j / (6 + dg)
+				for j in 6 + mini(dg, 10):
+					var a := TAU * j / (6 + mini(dg, 10))
 					_make_enemy("dust", e["pos"] + Vector3(cos(a), 0, sin(a)) * 2.2)
 				_play("warn", 1.6, -8.0)
 				_boss_rest(e, angry)
+			return [Vector3.ZERO, 6.0]
+		"spiral":
+			# 화난 보스: 실내화를 회오리처럼 빙글빙글 뿜어요
+			if e["stage"] == 0 and e["pat_t"] <= 0.0:
+				e["stage"] = 1
+				e["pat_t"] = 2.4
+				e["spin"] = rng.randf() * TAU
+				e["emit"] = 0.0
+			if e["stage"] == 1:
+				e["emit"] -= dt
+				e["spin"] += dt * (2.4 if angry else 1.9)
+				if e["emit"] <= 0.0:
+					e["emit"] = 0.07
+					for k in 2:
+						var a: float = e["spin"] + PI * k
+						var dv := Vector3(cos(a), 0, sin(a))
+						eshots.append({"pos": e["pos"] + dv * 1.2 + Vector3(0, 0.6, 0), "vel": dv * 5.0, "life": 4.0, "rot": a})
+					if Engine.get_process_frames() % 6 == 0:
+						_play("shoot", 0.6, -14.0)
+				if e["pat_t"] <= 0.0:
+					_boss_rest(e, angry)
+			return [Vector3.ZERO, 6.0]
+		"cross":
+			# 얼음 보스: 십자 모양 경고선 뒤에 실내화 줄기가 쏟아져요
+			if e["stage"] == 0:
+				e["spin"] = rng.randf() * TAU
+				for k in 4:
+					var a: float = e["spin"] + PI * 0.5 * k
+					_warn_line(e["pos"], Vector3(cos(a), 0, sin(a)), 1.0)
+				e["stage"] = 1
+				e["pat_t"] = 1.0
+			if e["stage"] == 1 and e["pat_t"] <= 0.0:
+				e["stage"] = 2
+				e["pat_t"] = 1.6
+				e["emit"] = 0.0
+				_play("zap", 0.8, -4.0)
+				shake = maxf(shake, 0.2)
+			if e["stage"] == 2:
+				e["emit"] -= dt
+				e["spin"] += dt * 0.35
+				if e["emit"] <= 0.0:
+					e["emit"] = 0.06
+					for k in 4:
+						var a: float = e["spin"] + PI * 0.5 * k
+						var dv := Vector3(cos(a), 0, sin(a))
+						eshots.append({"pos": e["pos"] + dv * 1.2 + Vector3(0, 0.6, 0), "vel": dv * 9.0, "life": 2.5, "rot": a})
+					_glow(e["pos"] + Vector3(0, 1.0, 0), Vector3.ZERO, Color(0.4, 0.8, 1.0, 0.8), 0.9, 0.2)
+				if e["pat_t"] <= 0.0:
+					_boss_rest(e, angry)
+			return [Vector3.ZERO, 6.0]
+		"jump":
+			# 그림자 보스: 사라졌다가 철수 쪽에 쾅 하고 떨어져요
+			if e["stage"] == 0:
+				var tp := player.position + move_dir * move_speed() * 0.5
+				tp.x = clampf(tp.x, -AX + 1.5, AX - 1.5)
+				tp.z = clampf(tp.z, -AZ + 1.5, AZ - 1.5)
+				e["jump_to"] = tp
+				e["jump_from"] = e["pos"]
+				_warn_circle(tp, 2.2, 1.0)
+				e["stage"] = 1
+				e["pat_t"] = 1.0
+				_puff(e["pos"], 1.6, 0.5, Color(0.3, 0.2, 0.45, 0.8))
+				_play("magnet", 0.7, -6.0)
+			if e["stage"] == 1:
+				e["vel"] = Vector3.ZERO
+				var k := clampf(1.0 - e["pat_t"], 0.0, 1.0)
+				var jf: Vector3 = e["jump_from"]
+				var jt: Vector3 = e["jump_to"]
+				e["pos"] = jf.lerp(jt, k)
+				e["hop"] = sin(k * PI) * 5.0
+				if e["pat_t"] <= 0.0:
+					e["hop"] = 0.0
+					e["stage"] = 2
+					e["pat_t"] = 0.6
+					_ring(e["pos"], Color(0.6, 0.4, 1.0, 1.0), 0.5, 4.0, 0.5)
+					_puff(e["pos"], 2.2, 0.6, Color(0.4, 0.3, 0.55, 0.8))
+					_play("kick", 0.7, 0.0)
+					shake = maxf(shake, 0.45)
+					var n := 10
+					for i in n:
+						var a := TAU * i / n
+						var dv := Vector3(cos(a), 0, sin(a))
+						eshots.append({"pos": e["pos"] + dv * 1.4 + Vector3(0, 0.6, 0), "vel": dv * 6.0, "life": 3.0, "rot": a})
+			if e["stage"] == 2 and e["pat_t"] <= 0.0:
+				e["stage"] = 0 if (angry and not e.get("jumped2", false)) else 3
+				e["jumped2"] = e["stage"] == 0
+				if e["stage"] == 3:
+					e["jumped2"] = false
+					_boss_rest(e, angry)
+			return [Vector3.ZERO, 0.0]
+		"goldrain":
+			# 황금 보스: 동전 비! 바닥 동그라미가 줄줄이 생겨요
+			if e["stage"] == 0:
+				var n := 8 + (4 if angry else 0)
+				for i in n:
+					var a := TAU * i / n + rng.randf() * 0.4
+					var r := 1.5 + (i % 3) * 1.6
+					var wp := player.position + Vector3(cos(a), 0, sin(a)) * r
+					if i == 0:
+						wp = player.position + move_dir * move_speed() * 0.8
+					_warn_circle(wp, 1.3, 0.9 + (i % 4) * 0.25)
+				for i in 10:
+					_glow(e["pos"] + Vector3(0, 2.0, 0), Vector3(rng.randf_range(-3, 3), 6.0, rng.randf_range(-3, 3)), Color(1.0, 0.85, 0.3, 0.9), 0.3, 0.6, 9.0)
+				_play("coin", 0.7, -3.0)
+				e["stage"] = 1
+				e["pat_t"] = 2.2
+			if e["pat_t"] <= 0.0:
+				_boss_rest(e, angry)
+			return [Vector3.ZERO, 6.0]
+		"nova":
+			# 전설의 보스: 엇갈린 실내화 고리가 여러 번 퍼져요
+			e["squash"] = 0.4 + 0.2 * sin(elapsed * 50.0)
+			if e["pat_t"] <= 0.0:
+				var n := 18
+				var off: float = (PI / n) * float(int(e["stage"]) % 2)
+				for i in n:
+					var a: float = off + TAU * i / n
+					var dv := Vector3(cos(a), 0, sin(a))
+					eshots.append({"pos": e["pos"] + dv * 1.3 + Vector3(0, 0.6, 0), "vel": dv * (4.0 + e["stage"] * 0.6), "life": 5.0, "rot": a})
+				_ring(e["pos"], Color(1.0, 0.5, 1.0, 1.0), 0.5, 3.0, 0.4)
+				_play("blast", 0.6, -3.0)
+				shake = maxf(shake, 0.2)
+				e["stage"] += 1
+				e["pat_t"] = 0.38
+				if e["stage"] >= (5 if angry else 4):
+					_boss_rest(e, angry)
 			return [Vector3.ZERO, 6.0]
 		"rest":
 			if e["pat_t"] <= 0.0:
@@ -2502,6 +2800,7 @@ func _weapons(dt: float) -> void:
 			_play("shoot" if not evolved.has("gun") else "blast", rng.randf_range(0.95, 1.1), -9.0)
 	_update_bullets(dt)
 	_weapon_colorpaper(dt)
+	_support_fx(dt)
 	_weapon_plane(dt)
 	_weapon_pop(dt)
 	# 딱지 (빙글빙글)
@@ -2640,6 +2939,154 @@ func _weapons(dt: float) -> void:
 			rings.erase(r)
 
 var cpapers: Array = []
+# 보조 아이템도 눈에 보이게: 각자 작은 효과를 내요
+var sup_t := {"bottle": 2.0, "watch": 6.0, "magnifier": 2.5, "sneakers": 0.0}
+var pages: Array = []
+var page_hit := {}
+var pickup_ring: MeshInstance3D
+var shield_t := 0.0
+var shield_on := false
+var shield_node: MeshInstance3D
+func _sup_mat(c: Color, a := 1.0, glow := 0.5) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(c.r, c.g, c.b, a)
+	if a < 1.0:
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.emission_enabled = true
+	m.emission = c * glow
+	return m
+
+func _support_fx(dt: float) -> void:
+	var pp := player.position
+	# 생수병: 주기적으로 물을 촤악 뿌려서 주변 귀신을 밀어내요
+	var lb := lv("bottle")
+	if lb > 0:
+		sup_t["bottle"] -= dt
+		if sup_t["bottle"] <= 0.0:
+			sup_t["bottle"] = maxf(2.5, 5.0 - 0.5 * lb) * cd_mult()
+			var r := (2.4 + 0.3 * lb) * area_mult()
+			_ring(pp, Color(0.4, 0.8, 1.0, 0.9), 0.3, r, 0.4)
+			for i in 14:
+				var a := TAU * i / 14.0
+				_glow(pp + Vector3(0, 0.5, 0), Vector3(cos(a) * 7.0, 2.5, sin(a) * 7.0), Color(0.45, 0.8, 1.0, 0.85), 0.22, 0.45, 12.0)
+			_play("splash", 1.3, -10.0)
+			for e in enemies:
+				var d: Vector3 = e["pos"] - pp
+				d.y = 0
+				if e["dead"] < 0.0 and d.length() < r + e["radius"]:
+					_hit_enemy(e, 5.0 + 3.0 * lb, d, 7.0, true)
+	# 공책: 공책 종이가 철수 주위를 빙글빙글 돌며 귀신을 때려요
+	var ln := lv("notebook")
+	while pages.size() < ln:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _box(Vector3(0.5, 0.03, 0.62))
+		mi.material_override = _sup_mat(Color("#fff6dc"), 1.0, 0.35)
+		var line := MeshInstance3D.new()
+		line.mesh = _box(Vector3(0.06, 0.035, 0.62))
+		line.material_override = _sup_mat(Color("#b48ef0"), 1.0, 0.6)
+		line.position = Vector3(-0.2, 0.005, 0)
+		mi.add_child(line)
+		add_child(mi)
+		pages.append(mi)
+	if ln > 0:
+		var pr := 1.9 * area_mult()
+		for i in pages.size():
+			var a := elapsed * 2.6 + TAU * i / pages.size()
+			var mi: MeshInstance3D = pages[i]
+			var ppos := pp + Vector3(cos(a) * pr, 0.75 + 0.12 * sin(elapsed * 6.0 + i), sin(a) * pr)
+			mi.position = ppos
+			mi.rotation = Vector3(0.5 * sin(elapsed * 5.0 + i), -a, 0.35)
+			if Engine.get_process_frames() % 4 == i % 4:
+				_glow(ppos, Vector3.ZERO, Color(0.75, 0.6, 1.0, 0.5), 0.25, 0.25)
+			for e in enemies:
+				if e["dead"] >= 0.0:
+					continue
+				var d: Vector3 = e["pos"] - ppos
+				d.y = 0
+				if d.length() < e["radius"] + 0.35 and elapsed - float(page_hit.get(e, -9.0)) > 0.5:
+					page_hit[e] = elapsed
+					_hit_enemy(e, 4.0 + 2.0 * ln, d, 3.0, true)
+		if Engine.get_process_frames() % 120 == 0:
+			page_hit.clear()
+	# 계산기 시계: 띠띠! 시간을 멈추듯 주변 귀신을 느리게 해요
+	var lw := lv("watch")
+	if lw > 0:
+		sup_t["watch"] -= dt
+		if sup_t["watch"] <= 0.0:
+			sup_t["watch"] = maxf(5.0, 10.0 - lw)
+			var r := 5.0 * area_mult()
+			_ring(pp, Color(0.5, 1.0, 0.45, 0.9), 0.3, r, 0.6)
+			_ring(pp, Color(0.8, 1.0, 0.6, 0.7), 0.3, r * 0.6, 0.45)
+			for i in 12:
+				var a := TAU * i / 12.0
+				_glow(pp + Vector3(cos(a) * 1.2, 1.0, sin(a) * 1.2), Vector3(cos(a), 0, sin(a)) * 3.0, Color(0.55, 1.0, 0.5, 0.9), 0.18, 0.5)
+			_play("heal", 2.2, -10.0)
+			for e in enemies:
+				if e["dead"] < 0.0 and (e["pos"] - pp).length() < r:
+					e["slow"] = 1.2 + 0.3 * lw
+					_glow(e["pos"] + Vector3(0, 1.0, 0), Vector3(0, 1.0, 0), Color(0.55, 1.0, 0.5, 0.8), 0.25, 0.6)
+	# 운동화: 달리면 반짝이는 먼지 발자국이 남아요
+	var ls := lv("sneakers")
+	if ls > 0 and move_dir.length() > 0.1:
+		sup_t["sneakers"] -= dt
+		if sup_t["sneakers"] <= 0.0:
+			sup_t["sneakers"] = 0.09
+			_puff(pp + Vector3(0, 0.1, 0) - move_dir.normalized() * 0.3, 0.35 + 0.05 * ls, 0.4, Color(1.0, 0.92, 0.6, 0.6))
+			_glow(pp + Vector3(rng.randf_range(-0.2, 0.2), 0.2, rng.randf_range(-0.2, 0.2)), Vector3(0, 1.2, 0), Color(1.0, 0.8, 0.2, 0.7), 0.16, 0.35)
+	# 돋보기: 햇빛을 모아 가장 가까운 귀신을 지져요
+	var lm := lv("magnifier")
+	if lm > 0:
+		sup_t["magnifier"] -= dt
+		var tg := _nearest_enemy(7.0)
+		if sup_t["magnifier"] <= 0.0 and not tg.is_empty():
+			sup_t["magnifier"] = maxf(1.2, 3.0 - 0.3 * lm) * cd_mult()
+			var tp: Vector3 = tg["pos"]
+			for i in 6:
+				_glow(tp + Vector3(0, 0.2 + i * 0.5, 0), Vector3(0, -2.0, 0), Color(1.0, 0.85, 0.3, 0.9), 0.4 - i * 0.04, 0.35)
+			_ring(tp, Color(1.0, 0.8, 0.2, 1.0), 0.2, 1.0, 0.3)
+			_sparkle(tp + Vector3(0, 0.6, 0), Color(1.0, 0.7, 0.2, 1.0), 6, 4.0, 0.12, 0.4)
+			_hit_enemy(tg, 10.0 + 5.0 * lm, Vector3.ZERO, 0.0, true)
+	# 필통: 줍는 거리를 바닥에 반짝이는 원으로 보여 줘요
+	var lpn := lv("pencil")
+	if lpn > 0:
+		if pickup_ring == null:
+			pickup_ring = MeshInstance3D.new()
+			var tm := TorusMesh.new()
+			tm.inner_radius = 0.96
+			tm.outer_radius = 1.0
+			tm.rings = 48
+			tm.ring_segments = 4
+			pickup_ring.mesh = tm
+			var m := _sup_mat(Color("#9b8cff"), 0.45, 1.0)
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			pickup_ring.material_override = m
+			add_child(pickup_ring)
+		var mr := magnet()
+		pickup_ring.position = pp + Vector3(0, 0.06, 0)
+		pickup_ring.scale = Vector3(mr, 1.0, mr) * (1.0 + 0.03 * sin(elapsed * 4.0))
+		pickup_ring.rotation.y = elapsed * 0.5
+	# 명찰: 하트 방패가 차면 한 번 막아 줘요
+	var lt := lv("nametag")
+	if lt > 0:
+		if not shield_on:
+			shield_t += dt
+			if shield_t >= maxf(12.0, 30.0 - 4.0 * lt):
+				shield_on = true
+				shield_t = 0.0
+				_ring(pp, Color(1.0, 0.45, 0.6, 1.0), 0.3, 1.6, 0.4)
+				_play("heal", 1.6, -8.0)
+		if shield_node == null:
+			shield_node = MeshInstance3D.new()
+			shield_node.mesh = _sph(1.0, -1.0, 20, 10)
+			var m := _sup_mat(Color("#ff7aa8"), 0.22, 0.9)
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+			shield_node.material_override = m
+			add_child(shield_node)
+		shield_node.visible = shield_on
+		shield_node.position = pp + Vector3(0, 0.75, 0)
+		shield_node.scale = Vector3.ONE * (1.05 + 0.05 * sin(elapsed * 5.0))
+
 var cp_cd := 1.0
 func _weapon_colorpaper(dt: float) -> void:
 	# 보조 아이템 색종이: 접은 색종이 별을 귀신에게 던져요
@@ -3114,7 +3561,7 @@ func _sync_draw() -> void:
 			tint = bt.lerp(bt * 1.25, 0.5 + 0.5 * sin(elapsed * 3.0)) if rk["pre"] != "" else bt
 		if e["kind"] == "eraser" and e["dash_t"] > 0.45:
 			tint = Color(1.4, 0.8, 0.8)
-		var tr := Transform3D(Basis(Vector3.UP, e["rot"]).scaled(scl), e["pos"] + Vector3(0, hop * 0.12, 0))
+		var tr := Transform3D(Basis(Vector3.UP, e["rot"]).scaled(scl), e["pos"] + Vector3(0, hop * 0.12 + float(e.get("hop", 0.0)), 0))
 		m.set_instance_transform(i, tr)
 		m.set_instance_color(i, Color.WHITE)
 		m.set_instance_custom_data(i, Color(tint.r, tint.g, tint.b, fl))
@@ -3255,6 +3702,16 @@ var god := false
 func _player_hurt(from: Vector3, amount := 1) -> void:
 	if god:
 		return
+	if shield_on:
+		# 명찰 방패가 대신 막아 줘요
+		shield_on = false
+		hurt_timer = 1.0
+		_ring(player.position, Color(1.0, 0.45, 0.6, 1.0), 0.5, 3.0, 0.45)
+		_sparkle(player.position + Vector3(0, 1, 0), Color(1.0, 0.6, 0.75, 1.0), 14, 6.0, 0.14, 0.5)
+		_number(player.position + Vector3(0, 2.0, 0), 0, true, "막았다!")
+		_play("pop", 1.4, -6.0)
+		_vib(40)
+		return
 	nohit_t = 0.0
 	hp -= amount
 	hurt_timer = 2.0
@@ -3326,6 +3783,10 @@ func _process(delta: float) -> void:
 			cam_off = cam.position - player.position
 			for e in enemies:
 				e["hp"] = 99999.0
+		if shot_mode == "sup":
+			move_dir = Vector3(1, 0, 0)
+		if (shot_mode == "sup" or shot_mode.begins_with("pat_")) and shot_frames in [20, 35, 50, 70, 90]:
+			get_viewport().get_texture().get_image().save_png("/tmp/f_%s_%d.png" % [shot_mode, shot_frames])
 		if shot_mode == "boss" and shot_frames % 12 == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/bs_%03d.png" % shot_frames)
 		if shot_mode == "cpaper" and cpapers.size() > 0 and shot_frames % 3 == 0:
@@ -3361,6 +3822,7 @@ func _process(delta: float) -> void:
 		_update_hud()
 		return
 	elapsed += dt
+	_weather_logic(dt)
 	_evo_aura(dt)
 	_boss_aura()
 	if boss_spawned and not boss.is_empty() and elapsed > boss_time + 60.0:
@@ -4638,6 +5100,11 @@ func _make_sounds() -> void:
 			sounds[nm] = load(path)
 	if sounds.has("ui_pick"):
 		sounds["pick"] = sounds["ui_pick"]
+	# 새로 만든 손맛 효과음(겹친 소리 + 잔향)으로 바꿔요. 요요 소리는 그대로!
+	for nm in ["hit", "blast", "shoot", "pop", "gem", "coin", "level", "evo", "hurt", "splash", "heal", "magnet", "rubber", "zap", "kick"]:
+		var path := "res://sfx/fx_%s.ogg" % nm
+		if ResourceLoader.exists(path):
+			sounds[nm] = load(path)
 	for i in 10:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
@@ -4662,6 +5129,9 @@ func _play(name: String, pitch := 1.0, db := 0.0) -> void:
 	var p: AudioStreamPlayer = players_audio[audio_i]
 	audio_i = (audio_i + 1) % players_audio.size()
 	p.stream = sounds[name]
+	# 자주 나는 소리는 높낮이를 살짝 흔들어서 덜 질리게
+	if name in ["hit", "blast", "gem", "shoot", "coin", "pop"]:
+		pitch *= randf_range(0.92, 1.08)
 	p.pitch_scale = pitch
 	p.volume_db = db
 	p.play()
@@ -4804,6 +5274,21 @@ func _setup_shot() -> void:
 		run_coins = 96
 		evolved["gun"] = true
 		_end_game(false)
+	if shot_mode == "sup":
+		for id in ["bottle", "notebook", "watch", "sneakers", "magnifier", "pencil", "nametag"]:
+			support_order.append(id)
+			supports[id] = 3
+		sup_t = {"bottle": 1.2, "watch": 1.0, "magnifier": 0.2, "sneakers": 0.0}
+		shield_t = 99.0
+		_refresh_ui()
+		_refresh_slots()
+	if shot_mode.begins_with("pat_"):
+		boss_spawned = true
+		boss = _make_enemy("boss", Vector3(0, 0, -4))
+		boss["pat"] = shot_mode.substr(4)
+		boss["pat_t"] = 0.3
+		boss["stage"] = 0
+		boss["speed"] = 0.0
 	if shot_mode == "mission":
 		while true:
 			_start_mission()

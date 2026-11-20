@@ -297,6 +297,9 @@ func _stage() -> void:
 		gnum.position = Vector2(282, 186)
 		var gmax := L("(최고 %d)" % mg, 22, SUB, row)
 		gmax.position = Vector2(580, 206)
+		var wid := Save.weather_for(sid, sel[sid])
+		var wl := L(Save.WEATHERS[wid]["name"], 26, Color(Save.WEATHERS[wid]["col"]).darkened(0.25), row)
+		wl.position = Vector2(470, 134)
 		var bk: String = "%s_%d" % [sid, sel[sid]]
 		var best: Dictionary = Save.data["best"].get(bk, {})
 		var rec := "아직 기록이 없어요"

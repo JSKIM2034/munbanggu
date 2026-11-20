@@ -19,6 +19,27 @@ const STAGES := {
 const STAGE_ORDER := ["ground", "hall", "lab", "toilet", "roof", "music"]
 
 # 특별한 날: 날짜마다 바뀌어요
+# 단계마다 바뀌는 날씨(바깥)와 학교 안 사건(건물 안). 10단계마다 한 바퀴 돌아요.
+const WEATHERS := {
+	"sunny": {"name": "맑은 날", "desc": "", "col": "#ffb03f"},
+	"sunset": {"name": "노을 지는 저녁", "desc": "하늘이 붉어지고 귀신이 조금 더 많이 와요", "col": "#ff8a5c"},
+	"rain": {"name": "비 오는 날", "desc": "물웅덩이에서 미끄러져요. 귀신도 웅덩이에선 느려요", "col": "#58a6e8"},
+	"night": {"name": "깜깜한 밤", "desc": "손전등 불빛만 믿어야 해요", "col": "#4a4fa8"},
+	"snow": {"name": "눈 오는 날", "desc": "귀신이 느려지지만 더 많이 몰려와요", "col": "#a8d8f0"},
+	"storm": {"name": "천둥 번개", "desc": "번개가 떨어질 빨간 동그라미를 피해요! 귀신도 맞아요", "col": "#7a6fd8"},
+	"normal": {"name": "평소의 학교", "desc": "", "col": "#b9b0bf"},
+	"cleaning": {"name": "청소 시간", "desc": "젖은 바닥에서 미끄러져요. 귀신도 젖은 바닥에선 느려요", "col": "#6ee0b0"},
+	"blackout": {"name": "정전", "desc": "불이 꺼졌어요! 손전등으로 버텨요", "col": "#4a4fa8"},
+	"alarm": {"name": "비상벨", "desc": "빨간 불이 번쩍! 귀신들이 빨라져요", "col": "#e8524a"},
+	"thunder": {"name": "창밖 천둥", "desc": "번쩍! 번개가 떨어질 곳을 피해요. 귀신도 맞아요", "col": "#7a6fd8"},
+	"midnight": {"name": "한밤의 학교", "desc": "깜깜한데 번개까지 쳐요!", "col": "#3a2f6a"},
+}
+const OUT_WEATHER := ["sunny", "sunny", "sunset", "sunset", "rain", "rain", "night", "snow", "snow", "storm"]
+const IN_WEATHER := ["normal", "normal", "cleaning", "cleaning", "blackout", "blackout", "alarm", "alarm", "thunder", "midnight"]
+func weather_for(sid: String, g: int) -> String:
+	var L: Array = OUT_WEATHER if sid in ["ground", "roof"] else IN_WEATHER
+	return L[(maxi(g, 1) - 1) % L.size()]
+
 const DAY_MODS := {
 	"normal": {"name": "평범한 날", "desc": "오늘은 별일 없어요.", "col": "#b9b0bf"},
 	"rain": {"name": "비 오는 날", "desc": "물웅덩이에서 미끄러져요. 귀신도 느려져요. 동전 +20%", "col": "#58a6e8"},
