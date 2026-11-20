@@ -110,7 +110,7 @@ const SUPPORTS := {
 	"notebook": {"name": "공책", "icon": "책", "col": "#b48ef0", "desc": "공격 범위,크기 +15%", "set": "ddakji"},
 	"watch": {"name": "계산기 시계", "icon": "시", "col": "#7cc95a", "desc": "공격 대기 시간 -8%", "set": "yoyo"},
 	"sneakers": {"name": "운동화", "icon": "신", "col": "#f2c230", "desc": "이동 속도 +10%", "set": "rubber"},
-	"colorpaper": {"name": "색종이", "icon": "색", "col": "#6fd3ff", "desc": "물줄기, 비행기, 콩알탄이 15% 더 빨리 날아가요", "set": "plane"},
+	"colorpaper": {"name": "색종이", "icon": "색", "col": "#6fd3ff", "desc": "색종이 별을 휙휙 던져요. 물줄기, 비행기, 콩알탄도 15% 빨라져요", "set": "plane"},
 	"magnifier": {"name": "돋보기", "icon": "돋", "col": "#ffb03f", "desc": "치명타 피해 +30%", "set": "pop"},
 	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "딱지 줍는 거리 +40%", "set": ""},
 	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "최대 하트 +1, 1칸 회복", "set": ""},
@@ -2339,6 +2339,7 @@ func _weapons(dt: float) -> void:
 			_glow(mz, face_dir * 2.0, Color(0.6, 0.9, 1.0, 0.9), 0.28 * gs["size"], 0.12)
 			_play("shoot" if not evolved.has("gun") else "blast", rng.randf_range(0.95, 1.1), -9.0)
 	_update_bullets(dt)
+	_weapon_colorpaper(dt)
 	_weapon_plane(dt)
 	_weapon_pop(dt)
 	# 딱지 (빙글빙글)
@@ -2475,6 +2476,54 @@ func _weapons(dt: float) -> void:
 		if k >= 1.6:
 			mi.queue_free()
 			rings.erase(r)
+
+var cpapers: Array = []
+var cp_cd := 1.0
+func _weapon_colorpaper(dt: float) -> void:
+	# 보조 아이템 색종이: 접은 색종이 별을 귀신에게 던져요
+	var l := lv("colorpaper")
+	if l > 0:
+		cp_cd -= dt
+		var tg := _nearest_enemy(9.0)
+		if cp_cd <= 0.0 and not tg.is_empty():
+			cp_cd = maxf(0.7, 2.2 - 0.3 * l) * cd_mult()
+			var cols := [Color("#ff7aa8"), Color("#ffd23f"), Color("#6ee0b0"), Color("#58c6f2"), Color("#c9a8f0")]
+			for i in mini(1 + l / 2, 3):
+				var dir: Vector3 = ((tg["pos"] as Vector3) - player.position)
+				dir.y = 0
+				dir = dir.normalized().rotated(Vector3.UP, deg_to_rad((i - (mini(1 + l / 2, 3) - 1) / 2.0) * 18.0))
+				var mi := MeshInstance3D.new()
+				mi.mesh = _star3d()
+				var m := StandardMaterial3D.new()
+				m.albedo_color = cols[rng.randi() % cols.size()]
+				m.emission_enabled = true
+				m.emission = m.albedo_color * 0.4
+				mi.material_override = m
+				mi.scale = Vector3.ONE * 6.0
+				add_child(mi)
+				cpapers.append({"node": mi, "pos": player.position + Vector3(0, 0.8, 0), "dir": dir, "life": 0.9, "dmg": 8.0 + 3.0 * l, "hit": {}, "col": m.albedo_color})
+			_play("yoyo", 2.6, -11.0)
+	for c in cpapers.duplicate():
+		c["life"] -= dt
+		c["pos"] += c["dir"] * 13.0 * proj_speed() * dt
+		var mi: MeshInstance3D = c["node"]
+		mi.position = c["pos"]
+		mi.rotation = Vector3(PI / 2, elapsed * 18.0, 0)
+		if Engine.get_process_frames() % 2 == 0:
+			var cc: Color = c["col"]
+			_glow(c["pos"], Vector3.ZERO, Color(cc.r, cc.g, cc.b, 0.7), 0.3, 0.3)
+		for e in enemies:
+			if e["dead"] >= 0.0 or c["hit"].has(e):
+				continue
+			if Vector2(e["pos"].x - c["pos"].x, e["pos"].z - c["pos"].z).length() < e["radius"] + 0.25:
+				c["hit"][e] = true
+				_hit_enemy(e, c["dmg"], c["dir"], 3.5)
+				c["life"] = 0.0
+				break
+		if c["life"] <= 0.0:
+			_part("star", c["pos"], Vector3(0, 3, 0), c["col"], 1.0, 0.6, 10.0, 14.0)
+			mi.queue_free()
+			cpapers.erase(c)
 
 func _weapon_plane(dt: float) -> void:
 	if mains.has("plane"):
@@ -3086,6 +3135,8 @@ func _process(delta: float) -> void:
 			cam_off = cam.position - player.position
 			for e in enemies:
 				e["hp"] = 99999.0
+		if shot_mode == "cpaper" and cpapers.size() > 0 and shot_frames % 3 == 0:
+			get_viewport().get_texture().get_image().save_png("/tmp/cp_%d.png" % shot_frames)
 		if shot_mode == "evocine" and shot_frames in [40, 60, 90, 185, 200]:
 			get_viewport().get_texture().get_image().save_png("/tmp/evc_%d.png" % shot_frames)
 		if shot_mode == "allw" and (shot_frames in [40, 55] or (shot_frames >= 14 and shot_frames <= 40 and bullets.size() > 0 and shot_frames % 2 == 0)):
@@ -4463,6 +4514,18 @@ func _setup_shot() -> void:
 		_refresh_slots()
 	if shot_mode == "cards" or shot_mode == "evocard":
 		_level_up()
+	if shot_mode == "cpaper":
+		supports["colorpaper"] = 3
+		support_order.append("colorpaper")
+		enemies.clear()
+		for i in 10:
+			var a := TAU * i / 10.0
+			var e := _make_enemy("paper", Vector3(cos(a), 0, sin(a)) * 5.0)
+			e["hp"] = 99999.0
+			e["speed"] = 0.2
+			e["spawn"] = 1.0
+		spawn_timer = 999.0
+		next_elite = 9999.0
 	if shot_mode == "evocine":
 		mains["gun"] = 5
 		supports["bottle"] = 1
