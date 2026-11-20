@@ -95,6 +95,12 @@ const MAINS := {
 	"yoyo": {"name": "요요", "icon": "요", "col": "#2fc79a", "partner": "watch", "evo": "번개 요요",
 		"evo_desc": "요요 4개! 맞히면 35% 확률로 찌릿, 번개가 옆으로 튀어요",
 		"desc": ["쭉 날아갔다 돌아오며 다 맞혀요", "요요 +1개", "피해 +40%", "더 멀리 날아가요", "요요 +1개"]},
+	"plane": {"name": "종이비행기", "icon": "비", "col": "#7fa8ff", "partner": "colorpaper", "evo": "종이학 편대",
+		"evo_desc": "종이학 6마리가 무지개 꼬리를 그리며 귀신을 줄줄이 꿰뚫어요",
+		"desc": ["귀신을 쫓아가는 종이비행기를 날려요", "비행기 +1", "피해 +40%", "비행기 +1, 더 빠르게", "귀신 2마리를 더 뚫고 날아가요"]},
+	"pop": {"name": "콩알탄", "icon": "콩", "col": "#ff5c5c", "partner": "magnifier", "evo": "왕 불꽃놀이",
+		"evo_desc": "하늘로 쏘아 올린 불꽃이 펑펑! 귀신 떼 위에서 크게 터져요",
+		"desc": ["귀신 무리에 콩알탄을 던져 펑! 터뜨려요", "콩알탄 +1", "폭발 범위 +25%", "피해 +40%", "콩알탄 +2"]},
 	"rubber": {"name": "고무줄", "icon": "줄", "col": "#ff9a2f", "partner": "sneakers", "evo": "무지개 고무줄",
 		"evo_desc": "무지개 고무줄이 두 겹으로 쫙쫙! 맞은 귀신은 느려져요",
 		"desc": ["고무줄이 쫙! 퍼지며 주변을 튕겨내요", "범위 +20%", "피해 +40%", "더 자주 퍼져요", "범위 +20%, 더 세게 튕겨요"]},
@@ -104,6 +110,8 @@ const SUPPORTS := {
 	"notebook": {"name": "공책", "icon": "책", "col": "#b48ef0", "desc": "공격 범위,크기 +15%", "set": "ddakji"},
 	"watch": {"name": "계산기 시계", "icon": "시", "col": "#7cc95a", "desc": "공격 대기 시간 -8%", "set": "yoyo"},
 	"sneakers": {"name": "운동화", "icon": "신", "col": "#f2c230", "desc": "이동 속도 +10%", "set": "rubber"},
+	"colorpaper": {"name": "색종이", "icon": "색", "col": "#6fd3ff", "desc": "물줄기, 비행기, 콩알탄이 15% 더 빨리 날아가요", "set": "plane"},
+	"magnifier": {"name": "돋보기", "icon": "돋", "col": "#ffb03f", "desc": "치명타 피해 +30%", "set": "pop"},
 	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "딱지 줍는 거리 +40%", "set": ""},
 	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "최대 하트 +1, 1칸 회복", "set": ""},
 }
@@ -130,7 +138,12 @@ var face_dir := Vector3(0, 0, 1)
 var walk_phase := 0.0
 var run_amt := 0.0
 var recoil := 0.0
-var cd := {"gun": 0.0, "yoyo": 0.5, "rubber": 1.0}
+var cd := {"gun": 0.0, "yoyo": 0.5, "rubber": 1.0, "plane": 0.3, "pop": 0.8}
+var planes: Array = []
+var pops: Array = []
+var plane_mesh: ArrayMesh
+var crane_mesh: ArrayMesh
+var pop_mesh: Mesh
 var orbit_angle := 0.0
 var spawn_timer := 1.0
 var elapsed := 0.0
@@ -155,6 +168,7 @@ var stick_vec := Vector2.ZERO
 # 그리기
 var mm := {}           # 이름 -> MultiMeshInstance3D
 var mat_vc: StandardMaterial3D
+var mat_vc_2s: StandardMaterial3D
 var sh_lit: Shader
 var sh_unlit: Shader
 var mesh_cache := {}
@@ -593,6 +607,12 @@ func _make_world() -> void:
 	e.ambient_light_color = Color("#fff1e0")
 	e.ambient_light_energy = 0.38
 	e.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	e.glow_enabled = true
+	e.glow_intensity = 1.2
+	e.glow_strength = 1.2
+	e.glow_bloom = 0.0
+	e.glow_hdr_threshold = 0.92
+	e.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	env.environment = e
 	add_child(env)
 	var sun := DirectionalLight3D.new()
@@ -1046,6 +1066,36 @@ func _enemy_mesh(kind: String) -> ArrayMesh:
 			L.append([_sph(0.07, -1, 8, 4), T(Vector3(sx * 0.12, 0.07, 0.0)), col.darkened(0.15)])
 	return merge(L)
 
+func _paper_plane(c1: Color, c2: Color, crane := false) -> ArrayMesh:
+	# 앞이 -Z(look_at 기준)인 종이비행기: 날개 두 장 + 아래 용골
+	var nose := Vector3(0, 0, -0.32)
+	var tail := Vector3(0, 0.0, 0.22)
+	var lw := Vector3(-0.28, 0.05, 0.24)
+	var rw := Vector3(0.28, 0.05, 0.24)
+	var keel := Vector3(0, -0.09, 0.22)
+	var tris := [[nose, lw, tail, c1], [nose, tail, rw, c1], [nose, keel, tail, c2], [nose, tail, keel, c2]]
+	if crane:
+		tris.append([tail, Vector3(0, 0.22, 0.35), Vector3(0, 0.02, 0.1), c2])
+		tris.append([lw, Vector3(-0.45, 0.25, 0.1), Vector3(-0.1, 0.05, 0.0), c1])
+		tris.append([rw, Vector3(0.1, 0.05, 0.0), Vector3(0.45, 0.25, 0.1), c1])
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	for t in tris:
+		var n: Vector3 = ((t[1] - t[0]) as Vector3).cross(t[2] - t[0]).normalized()
+		for j in 3:
+			verts.append(t[j])
+			norms.append(n)
+			cols.append(t[3])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = norms
+	arr[Mesh.ARRAY_COLOR] = cols
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return am
+
 func _ddakji_mesh(c1: Color, c2: Color) -> ArrayMesh:
 	var L: Array = []
 	L.append([_box(Vector3(0.3, 0.05, 0.3)), T(Vector3.ZERO), c1])
@@ -1108,6 +1158,18 @@ func _make_multimeshes() -> void:
 	_mm("eshot", merge(SH), 120, true)
 	_mm("gem", _ddakji_mesh(Color.WHITE, Color(1, 1, 1).darkened(0.25)), 300, true)
 	_mm("bullet", _sph(0.17, -1, 10, 5), 80, false)
+	(mm["bullet"].material_override as ShaderMaterial).shader = _fx_shader("""
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){
+  float f = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+  vec3 c = mix(vec3(1.0), cu.rgb, smoothstep(0.15, 0.7, f));
+  c += vec3(0.8) * pow(f, 10.0);
+  ALBEDO = c; ALPHA = cu.a * (0.55 + 0.45 * f);
+}
+""")
 	_mm("drop", _sph(1.0, -1, 6, 3), 260, false)
 	_mm("star", _box(Vector3(0.12, 0.12, 0.02)), 160, false)
 	# 빛나는 알갱이(더하기 섞기), 퍼지는 고리, 뭉게구름
@@ -1156,6 +1218,15 @@ render_mode unshaded, blend_mix, depth_draw_never, shadows_disabled;
 void fragment(){ float d = length(UV - 0.5) * 2.0; ALBEDO = vec3(0.25,0.15,0.1); ALPHA = (1.0 - smoothstep(0.55, 1.0, d)) * 0.28; }
 """
 	sm.shader = shs
+	plane_mesh = _paper_plane(Color("#f5f8ff"), Color("#9cc2ff"))
+	crane_mesh = _paper_plane(Color("#fff3b0"), Color("#ff9ab8"), true)
+	var PP: Array = []
+	PP.append([_sph(0.1, -1, 8, 4), T(Vector3.ZERO), Color("#ff4f4f")])
+	PP.append([_sph(0.06, -1, 6, 3), T(Vector3(0.05, 0.06, 0.03)), Color("#fff3e0")])
+	pop_mesh = merge(PP)
+	mat_vc_2s = mat_vc.duplicate()
+	mat_vc_2s.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat_vc_2s.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ddakji_mesh = _ddakji_mesh(Color("#ff7aa8"), Color("#ffd1e1"))
 	ddakji_gold_mesh = _ddakji_mesh(Color("#ffc928"), Color("#fff3b0"))
 	yoyo_mesh = _yoyo_mesh(Color("#2fc79a"))
@@ -1338,6 +1409,36 @@ func _rubber_base() -> Dictionary:
 		return {"cool": 1.4, "radius": 4.2, "dmg": 24.0, "knock": 8.0, "double": true}
 	return {"cool": 3.0 * (0.72 if l >= 4 else 1.0), "radius": 2.6 * (1.2 if l >= 2 else 1.0) * (1.2 if l >= 5 else 1.0),
 		"dmg": 12.0 * (1.4 if l >= 3 else 1.0), "knock": 7.0 if l >= 5 else 4.5, "double": false}
+
+func proj_speed() -> float:
+	return 1.0 + 0.15 * lv("colorpaper")
+
+func plane_stats() -> Dictionary:
+	var l := lv("plane")
+	var w := Save.shop_lv("w_plane")
+	var d: Dictionary
+	if evolved.has("plane"):
+		d = {"count": 6, "dmg": 24.0, "pierce": 5, "speed": 10.0, "cool": 1.6, "life": 3.0}
+	else:
+		d = {"count": 1 + (1 if l >= 2 else 0) + (1 if l >= 4 else 0), "dmg": 12.0 * (1.4 if l >= 3 else 1.0),
+			"pierce": 2 if l >= 5 else 0, "speed": 8.0 * (1.2 if l >= 4 else 1.0), "cool": 1.5, "life": 2.2}
+	d["dmg"] *= 1.0 + 0.12 * w
+	d["cool"] *= 1.0 - 0.04 * w
+	d["speed"] *= proj_speed()
+	return d
+
+func pop_stats() -> Dictionary:
+	var l := lv("pop")
+	var w := Save.shop_lv("w_pop")
+	var d: Dictionary
+	if evolved.has("pop"):
+		d = {"count": 3, "dmg": 32.0, "radius": 2.4, "cool": 1.3}
+	else:
+		d = {"count": 1 + (1 if l >= 2 else 0) + (2 if l >= 5 else 0), "dmg": 14.0 * (1.4 if l >= 4 else 1.0),
+			"radius": 1.4 * (1.25 if l >= 3 else 1.0), "cool": 1.8}
+	d["dmg"] *= 1.0 + 0.12 * w
+	d["cool"] *= 1.0 - 0.04 * w
+	return d
 
 func evo_ready(id: String) -> bool:
 	return mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id)
@@ -1660,7 +1761,7 @@ func _hit_enemy(e: Dictionary, dmg: float, dir: Vector3, knock := 5.0, quiet := 
 	dmg *= dmg_mult()
 	var crit := rng.randf() < crit_chance()
 	if crit:
-		dmg *= 2.0
+		dmg *= 2.0 + 0.3 * lv("magnifier")
 	e["hp"] -= dmg
 	e["flash"] = 0.08
 	e["squash"] = 1.0
@@ -2086,6 +2187,8 @@ func _weapons(dt: float) -> void:
 			_glow(mz, face_dir * 2.0, Color(0.6, 0.9, 1.0, 0.9), 0.28 * gs["size"], 0.12)
 			_play("shoot" if not evolved.has("gun") else "blast", rng.randf_range(0.95, 1.1), -9.0)
 	_update_bullets(dt)
+	_weapon_plane(dt)
+	_weapon_pop(dt)
 	# 딱지 (빙글빙글)
 	if mains.has("ddakji"):
 		var ds := ddakji_stats()
@@ -2221,6 +2324,152 @@ func _weapons(dt: float) -> void:
 			mi.queue_free()
 			rings.erase(r)
 
+func _weapon_plane(dt: float) -> void:
+	if mains.has("plane"):
+		var ps := plane_stats()
+		cd["plane"] -= dt
+		if cd["plane"] <= 0.0 and not _nearest_enemy(11.0).is_empty():
+			cd["plane"] = ps["cool"] * cd_mult()
+			for i in int(ps["count"]):
+				var a: float = TAU * i / ps["count"] + rng.randf() * 0.5
+				var mi := MeshInstance3D.new()
+				mi.mesh = crane_mesh if evolved.has("plane") else plane_mesh
+				mi.material_override = mat_vc_2s
+				add_child(mi)
+				planes.append({"node": mi, "pos": player.position + Vector3(0, 1.0, 0), "vel": Vector3(cos(a), 0.4, sin(a)) * ps["speed"] * 0.7,
+					"life": ps["life"], "dmg": ps["dmg"], "pierce": ps["pierce"], "speed": ps["speed"], "hit": {}, "trail": 0.0, "evo": evolved.has("plane"), "hue": rng.randf()})
+			_play("yoyo", 1.6, -9.0)
+	for pl in planes.duplicate():
+		pl["life"] -= dt
+		var mi: MeshInstance3D = pl["node"]
+		var pos: Vector3 = pl["pos"]
+		# 가장 가까운(아직 안 맞힌) 귀신 쪽으로 방향을 틀어요
+		var best := {}
+		var bd := 9.0
+		for e in enemies:
+			if e["dead"] >= 0.0 or e.has("prop") or pl["hit"].has(e):
+				continue
+			var dd: float = (e["pos"] as Vector3).distance_to(pos)
+			if dd < bd:
+				bd = dd
+				best = e
+		var want: Vector3 = pl["vel"]
+		if not best.is_empty():
+			want = ((best["pos"] as Vector3) + Vector3(0, 0.6, 0) - pos).normalized() * pl["speed"]
+		pl["vel"] = (pl["vel"] as Vector3).lerp(want, minf(1.0, dt * 4.5))
+		pos += pl["vel"] * dt
+		pos.y = maxf(pos.y, 0.45)
+		pl["pos"] = pos
+		mi.position = pos
+		var v: Vector3 = pl["vel"]
+		if v.length() > 0.1:
+			mi.look_at(pos + v, Vector3.UP)
+			mi.rotate_object_local(Vector3.FORWARD, sin(pl["life"] * 6.0) * 0.4)
+		mi.scale = Vector3.ONE * (1.3 if pl["evo"] else 1.0)
+		pl["trail"] -= dt
+		if pl["trail"] <= 0.0:
+			pl["trail"] = 0.03
+			var tc := Color.from_hsv(fmod(pl["hue"] + elapsed * 0.8, 1.0), 0.55, 1.0, 0.8) if pl["evo"] else Color(0.7, 0.85, 1.0, 0.6)
+			_glow(pos, -v * 0.1, tc, 0.16 if pl["evo"] else 0.11, 0.35)
+		for e in enemies:
+			if e["dead"] >= 0.0 or pl["hit"].has(e):
+				continue
+			if Vector2(e["pos"].x - pos.x, e["pos"].z - pos.z).length() < e["radius"] + 0.3:
+				pl["hit"][e] = true
+				_hit_enemy(e, pl["dmg"], v, 4.0)
+				_sparkle(pos, Color(0.8, 0.9, 1.0, 1.0), 4, 4.0, 0.12, 0.3)
+				pl["pierce"] -= 1
+				if pl["pierce"] < 0:
+					pl["life"] = 0.0
+				break
+		if pl["life"] <= 0.0:
+			_puff(pos, 0.25, 0.35)
+			_burst(pos, Color(0.95, 0.95, 1.0, 0.9), 5, 3.0, true)
+			mi.queue_free()
+			planes.erase(pl)
+
+func _weapon_pop(dt: float) -> void:
+	if mains.has("pop"):
+		var ps := pop_stats()
+		cd["pop"] -= dt
+		if cd["pop"] <= 0.0:
+			var cands: Array = []
+			for e in enemies:
+				if e["dead"] < 0.0 and not e.has("prop") and (e["pos"] as Vector3).distance_to(player.position) < 8.0:
+					cands.append(e)
+			if cands.size() > 0:
+				cd["pop"] = ps["cool"] * cd_mult()
+				for i in int(ps["count"]):
+					var tg: Dictionary = cands[rng.randi() % cands.size()]
+					var to: Vector3 = tg["pos"] + (tg["vel"] as Vector3) * 0.4 + Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
+					var mi := MeshInstance3D.new()
+					mi.mesh = pop_mesh
+					mi.material_override = mat_vc
+					add_child(mi)
+					var evo := evolved.has("pop")
+					pops.append({"node": mi, "from": player.position + Vector3(0, 0.9, 0), "to": Vector3(to.x, 0.1, to.z), "t": -i * 0.08,
+						"dur": (0.75 if evo else 0.45) / proj_speed(), "dmg": ps["dmg"], "radius": ps["radius"] * area_mult(), "evo": evo})
+				_play("yoyo", 2.2, -10.0)
+	for pp in pops.duplicate():
+		pp["t"] += dt
+		var mi: MeshInstance3D = pp["node"]
+		if pp["t"] < 0.0:
+			mi.visible = false
+			continue
+		mi.visible = true
+		var k: float = minf(1.0, pp["t"] / pp["dur"])
+		var h := (5.0 if pp["evo"] else 2.2) * 4.0 * k * (1.0 - k)
+		var pos: Vector3 = (pp["from"] as Vector3).lerp(pp["to"], k) + Vector3(0, h, 0)
+		mi.position = pos
+		mi.rotation = Vector3(k * 20.0, k * 14.0, 0)
+		mi.scale = Vector3.ONE * (1.6 if pp["evo"] else 1.0)
+		if Engine.get_process_frames() % 2 == 0:
+			_glow(pos, Vector3.ZERO, Color(1.0, 0.6, 0.2, 0.8) if not pp["evo"] else Color.from_hsv(fmod(elapsed, 1.0), 0.6, 1.0, 0.9), 0.14 if not pp["evo"] else 0.22, 0.3)
+		if k >= 1.0:
+			_pop_explode(pp["to"], pp["radius"], pp["dmg"], pp["evo"])
+			mi.queue_free()
+			pops.erase(pp)
+
+func _pop_explode(at: Vector3, r: float, dmg: float, evo: bool) -> void:
+	# 펑! 색색 불꽃
+	var cols := [Color(1.0, 0.85, 0.3), Color(1.0, 0.45, 0.35), Color(1.0, 0.95, 0.8)]
+	if evo:
+		cols = [Color.from_hsv(rng.randf(), 0.6, 1.0), Color.from_hsv(rng.randf(), 0.6, 1.0), Color(1, 1, 0.9)]
+	_glow(at + Vector3(0, 0.5, 0), Vector3.ZERO, Color(1.0, 0.9, 0.6, 1.0), r * 0.9, 0.16)
+	_ring(at, Color(cols[0].r, cols[0].g, cols[0].b, 1.0), 0.2, r * 1.15, 0.35)
+	for i in (26 if evo else 14):
+		var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.3, 1.6), rng.randf_range(-1, 1)).normalized() * r * rng.randf_range(3.0, 5.0)
+		var c: Color = cols[i % cols.size()]
+		_glow(at + Vector3(0, 0.4, 0), v, Color(c.r, c.g, c.b, 1.0), rng.randf_range(0.1, 0.18), rng.randf_range(0.35, 0.6), 7.0)
+	for i in (3 if evo else 2):
+		_puff(at + Vector3(0, 0.3, 0), 0.3 * r, 0.5, Color(0.6, 0.55, 0.5, 0.55))
+	_play("blast", rng.randf_range(1.2, 1.5), -6.0)
+	shake = maxf(shake, 0.12 if not evo else 0.2)
+	for e in enemies:
+		if e["dead"] >= 0.0:
+			continue
+		var d: Vector3 = e["pos"] - at
+		d.y = 0
+		if d.length() < r + e["radius"] * 0.5:
+			_hit_enemy(e, dmg, d, 5.0, true)
+	if evo:
+		# 작은 불꽃이 연달아 터져요
+		for i in 3:
+			var a := TAU * i / 3.0 + rng.randf()
+			var p2 := at + Vector3(cos(a), 0, sin(a)) * r * 0.8
+			get_tree().create_timer(0.12 + i * 0.08).timeout.connect(func(): _pop_explode_small(p2, r * 0.5, dmg * 0.5))
+
+func _pop_explode_small(at: Vector3, r: float, dmg: float) -> void:
+	var c := Color.from_hsv(rng.randf(), 0.6, 1.0, 1.0)
+	_ring(at, c, 0.1, r * 1.2, 0.3)
+	for i in 10:
+		var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.4, 1.4), rng.randf_range(-1, 1)).normalized() * rng.randf_range(3.0, 5.0)
+		_glow(at + Vector3(0, 0.4, 0), v, c, 0.12, 0.45, 7.0)
+	for e in enemies:
+		if e["dead"] < 0.0 and (e["pos"] as Vector3).distance_to(at) < r + 0.3:
+			_hit_enemy(e, dmg, e["pos"] - at, 3.0, true)
+	_play("pop", 1.8, -9.0)
+
 func _rubber_wave(rs: Dictionary, delay: float, col := Color("#ff9a2f")) -> void:
 	var tm := TorusMesh.new()
 	tm.inner_radius = 0.86
@@ -2288,12 +2537,13 @@ func _bolt(a: Vector3, b: Vector3) -> void:
 
 func _update_bullets(dt: float) -> void:
 	for b in bullets.duplicate():
-		b["pos"] += b["dir"] * 15.0 * dt
+		b["pos"] += b["dir"] * 15.0 * proj_speed() * dt
 		b["life"] -= dt
 		b["trail"] -= dt
 		if b["trail"] <= 0.0:
-			b["trail"] = 0.06
-			_glow(b["pos"], -b["dir"] * 1.5, Color(0.35, 0.7, 1.0, 0.7), 0.13 * b["size"], 0.28)
+			b["trail"] = 0.05
+			_glow(b["pos"] - b["dir"] * 0.3, -b["dir"] * 1.5, Color(0.35, 0.7, 1.0, 0.7), 0.13 * b["size"], 0.28)
+			_part("drop", b["pos"], -b["dir"] * 2.0 + Vector3(rng.randf_range(-1, 1), 1.5, rng.randf_range(-1, 1)), Color(0.75, 0.92, 1.0, 0.85), 0.045 * b["size"], 0.35)
 		var done: bool = b["life"] <= 0.0
 		for e in enemies:
 			if e["dead"] >= 0.0 or b["hit"].has(e):
@@ -2307,8 +2557,12 @@ func _update_bullets(dt: float) -> void:
 					done = true
 					break
 		if done:
-			_burst(b["pos"], Color(0.65, 0.88, 1.0, 0.85), 6, 3.0)
-			_ring(b["pos"], Color(0.45, 0.8, 1.0, 0.9), 0.1, 0.7 * b["size"], 0.3)
+			# 철퍽! 물보라
+			for j in 8:
+				var sv := Vector3(rng.randf_range(-1, 1), rng.randf_range(1.0, 2.2), rng.randf_range(-1, 1)).normalized() * rng.randf_range(2.5, 4.5)
+				_part("drop", b["pos"], sv, Color(0.7, 0.9, 1.0, 0.9), rng.randf_range(0.05, 0.09) * b["size"], 0.45)
+			_ring(b["pos"], Color(0.45, 0.8, 1.0, 0.9), 0.1, 0.9 * b["size"], 0.3)
+			_puff(b["pos"], 0.18 * b["size"], 0.3, Color(0.85, 0.95, 1.0, 0.5))
 			bullets.erase(b)
 
 func _splash(pos: Vector3, r: float, skip: Dictionary, dmg: float) -> void:
@@ -2524,11 +2778,13 @@ func _sync_draw() -> void:
 	var bn := mini(bullets.size(), 80)
 	for i in bn:
 		var b: Dictionary = bullets[i]
-		var basis := Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.85, 0.85, 1.7) * b["size"])
+		# 길쭉한 물줄기: 꿈틀꿈틀 굵기가 바뀌어요
+		var wob := 1.0 + 0.12 * sin(elapsed * 40.0 + i)
+		var basis := Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.62 * wob, 0.62 / wob, 3.4) * b["size"])
 		bm.set_instance_transform(i, Transform3D(basis, b["pos"]))
 		bm.set_instance_custom_data(i, Color(0.7, 0.92, 1.0, 0.95) if b["splash"] == 0.0 else Color(0.45, 0.78, 1.0, 0.97))
 		var bg: MultiMesh = mm["bglow"].multimesh
-		bg.set_instance_transform(i, Transform3D(Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.42, 0.42, 0.75) * b["size"]), b["pos"]))
+		bg.set_instance_transform(i, Transform3D(Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.38, 0.38, 1.1) * b["size"]), b["pos"] - (b["dir"] as Vector3) * 0.25 * b["size"]))
 		bg.set_instance_custom_data(i, Color(0.15, 0.45, 0.9, 0.5))
 	bm.visible_instance_count = bn
 	mm["bglow"].multimesh.visible_instance_count = bn
@@ -2659,7 +2915,7 @@ func _process(delta: float) -> void:
 			cam_off = cam.position - player.position
 			for e in enemies:
 				e["hp"] = 99999.0
-		if shot_mode == "allw" and shot_frames in [40, 55]:
+		if shot_mode == "allw" and (shot_frames in [40, 55] or (shot_frames >= 14 and shot_frames <= 40 and bullets.size() > 0 and shot_frames % 2 == 0)):
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_allw_%d.png" % shot_frames)
 		if shot_frames == (34 if shot_mode == "boss" else (70 if shot_mode == "allw" else (32 if shot_mode == "kills" else 110))) and perf_frames == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_%s.png" % shot_mode)
@@ -3022,13 +3278,13 @@ func _pause_menu() -> void:
 	sl.offset_bottom = -350
 	var lines := _set_lines()
 	for i in lines.size():
-		var ll := _label(lines[i][0], 28, lines[i][1], card_panel, 8)
+		var ll := _label(lines[i][0], 25, lines[i][1], card_panel, 8)
 		ll.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		ll.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		ll.offset_left = -340
 		ll.offset_right = 340
-		ll.offset_top = -340 + i * 48
-		ll.offset_bottom = -300 + i * 48
+		ll.offset_top = -350 + i * 40
+		ll.offset_bottom = -312 + i * 40
 	var go := _small_btn("계속하기", Color("#4fa8e8"), 44)
 	go.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	go.offset_left = -170
@@ -3824,15 +4080,15 @@ func _setup_shot() -> void:
 	for e in enemies:
 		e["spawn"] = 1.0
 	if shot_mode in ["evo", "evocard", "evo_perf"]:
-		for id in ["ddakji", "yoyo", "rubber"]:
+		for id in ["plane", "pop", "rubber"]:
 			main_order.append(id)
 			mains[id] = 5
 		mains["gun"] = 5
-		for id in ["bottle", "notebook", "watch", "sneakers"]:
+		for id in ["bottle", "colorpaper", "magnifier", "sneakers"]:
 			support_order.append(id)
 			supports[id] = 2
 		if shot_mode != "evocard":
-			for id in ["gun", "ddakji", "yoyo", "rubber"]:
+			for id in ["gun", "plane", "pop", "rubber"]:
 				evolved[id] = true
 		_refresh_ui()
 		_refresh_slots()
@@ -3853,6 +4109,8 @@ func _setup_shot() -> void:
 		spawn_timer = 999.0
 		next_elite = 9999.0
 	if shot_mode == "allw":
+		if OS.get_cmdline_user_args().has("--close"):
+			cam_off = Vector3(0, 7.0, 5.5)
 		enemies.clear()
 		for i in 14:
 			var a := TAU * i / 14.0
@@ -3860,7 +4118,7 @@ func _setup_shot() -> void:
 			e["hp"] = 99999.0
 			e["speed"] = 0.3
 			e["spawn"] = 1.0
-		for id in ["ddakji", "yoyo", "rubber"]:
+		for id in ["plane", "pop", "yoyo"]:
 			main_order.append(id)
 			mains[id] = 4
 		mains["gun"] = 4
