@@ -78,6 +78,7 @@ const KINDS := {
 	"kettle": {"hp": 110.0, "speed": 1.2, "r": 0.62, "scale": 1.7, "xp": 3, "col": "#ffd23f", "from": 70.0},
 	"eraser": {"hp": 55.0, "speed": 1.7, "r": 0.5, "scale": 1.35, "xp": 2, "col": "#7fd18b", "from": 85.0},
 	"dust": {"hp": 9.0, "speed": 3.5, "r": 0.3, "scale": 0.95, "xp": 1, "col": "#b8b2c0", "from": 115.0},
+	"report": {"hp": 45.0, "speed": 2.0, "r": 0.42, "scale": 1.3, "xp": 2, "col": "#ff9db8", "from": 140.0},
 	"relay": {"hp": 30.0, "speed": 5.2, "r": 0.4, "scale": 1.35, "xp": 2, "col": "#ff6b6b", "from": 9999.0},
 	"pot": {"hp": 40.0, "speed": 0.0, "r": 0.4, "scale": 1.3, "xp": 0, "col": "#d9774a", "from": 9999.0, "prop": true},
 	"ext": {"hp": 40.0, "speed": 0.0, "r": 0.35, "scale": 1.3, "xp": 0, "col": "#e8433a", "from": 9999.0, "prop": true},
@@ -273,6 +274,13 @@ func _ready() -> void:
 		cam_off = Vector3(0.0, 2.3, 5.2)
 		cam.position = cam_off
 		cam.look_at(Vector3(0, 1.0, 0), Vector3.UP)
+		if ResourceLoader.exists("res://models/granny.glb"):
+			var gr: Node3D = (load("res://models/granny.glb") as PackedScene).instantiate()
+			gr.position = Vector3(1.0, 0, -1.4)
+			gr.rotation.y = -0.3
+			gr.scale = Vector3.ONE * 1.25
+			gr.name = "Granny"
+			add_child(gr)
 		menu_node = load("res://menu.gd").new()
 		menu_node.set("main", self)
 		add_child(menu_node)
@@ -502,6 +510,52 @@ varying vec4 cu;
 void vertex(){ cu = INSTANCE_CUSTOM; }
 void fragment(){ ALBEDO = cu.rgb; ALPHA = cu.a; }
 """
+
+const GHOST_MODELS := {"paper": "ghost_paper", "egg": "ghost_egg", "kettle": "ghost_kettle", "eraser": "ghost_eraser",
+	"dust": "ghost_dust", "report": "ghost_report", "boss": "boss_locker"}
+var sh_tex: Shader
+func _mm_textured(name: String, glb: String, count: int) -> void:
+	# 3D 모델(텍스처 있음)을 MultiMesh로: 맞으면 하얗게 번쩍, 정예는 금빛
+	var inst: Node = (load(glb) as PackedScene).instantiate()
+	var mi: MeshInstance3D = inst.find_children("*", "MeshInstance3D", true, false)[0]
+	var mesh: Mesh = mi.mesh
+	var mat := mesh.surface_get_material(0)
+	if mi.get_surface_override_material(0):
+		mat = mi.get_surface_override_material(0)
+	var tex: Texture2D = (mat as BaseMaterial3D).albedo_texture if mat is BaseMaterial3D else null
+	inst.free()
+	if sh_tex == null:
+		sh_tex = Shader.new()
+		sh_tex.code = """
+shader_type spatial;
+render_mode specular_disabled;
+uniform sampler2D tex : source_color, filter_linear_mipmap;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){
+  vec3 c = texture(tex, UV).rgb * cu.rgb;
+  ALBEDO = mix(c, vec3(1.0), cu.a);
+  EMISSION = vec3(cu.a * 0.6);
+  ROUGHNESS = 0.85;
+}
+"""
+	var m := MultiMesh.new()
+	m.transform_format = MultiMesh.TRANSFORM_3D
+	m.use_custom_data = true
+	m.use_colors = true
+	m.mesh = mesh
+	m.instance_count = count
+	m.visible_instance_count = 0
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = m
+	var sm := ShaderMaterial.new()
+	sm.shader = sh_tex
+	sm.set_shader_parameter("tex", tex)
+	mmi.material_override = sm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.custom_aabb = AABB(Vector3(-100, -10, -100), Vector3(200, 40, 200))
+	add_child(mmi)
+	mm[name] = mmi
 
 func _mm(name: String, mesh: Mesh, count: int, lit: bool) -> void:
 	var m := MultiMesh.new()
@@ -1003,7 +1057,11 @@ func _yoyo_mesh(c: Color) -> ArrayMesh:
 
 func _make_multimeshes() -> void:
 	for kind in KINDS:
-		_mm(kind, _enemy_mesh(kind), 4 if kind == "boss" else MAX_ENEMY, true)
+		var glb := "res://models/%s.glb" % GHOST_MODELS.get(kind, "")
+		if GHOST_MODELS.has(kind) and ResourceLoader.exists(glb):
+			_mm_textured(kind, glb, 4 if kind == "boss" else MAX_ENEMY)
+		else:
+			_mm(kind, _enemy_mesh(kind), 4 if kind == "boss" else MAX_ENEMY, true)
 	var H: Array = []
 	H.append([_sph(0.15, -1, 10, 5), T(Vector3(-0.1, 0.05, 0)), Color("#ff4f6d")])
 	H.append([_sph(0.15, -1, 10, 5), T(Vector3(0.1, 0.05, 0)), Color("#ff4f6d")])
@@ -1069,14 +1127,7 @@ void fragment(){ float d = length(UV - 0.5) * 2.0; ALBEDO = vec3(0.25,0.15,0.1);
 func _make_player() -> void:
 	player = Node3D.new()
 	add_child(player)
-	model = (load("res://models/chulsoo.glb") as PackedScene).instantiate()
-	model.scale = Vector3.ONE * 1.5
-	player.add_child(model)
-	for mi in model.find_children("*", "MeshInstance3D", true, false):
-		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	skel = model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-	for i in skel.get_bone_count():
-		bones[skel.get_bone_name(i)] = [i, skel.get_bone_rest(i).basis.get_rotation_quaternion(), skel.get_bone_global_rest(i).basis.get_rotation_quaternion()]
+	_load_model(char_id)
 	var L: Array = []
 	L.append([_box(Vector3(0.16, 0.13, 0.34)), T(Vector3(0, 0, 0.02)), Color("#4fa8e8")])
 	L.append([_cyl(0.085, 0.24), T(Vector3(0, 0.13, -0.02), Vector3(90, 0, 0)), Color("#ffd23f")])
@@ -1089,6 +1140,30 @@ func _make_player() -> void:
 	(gun as MeshInstance3D).material_override = mat_vc
 	gun.scale = Vector3.ONE * 0.95
 	player.add_child(gun)
+
+func _load_model(cid: String) -> void:
+	if model:
+		model.queue_free()
+	var path := "res://models/%s.glb" % cid
+	if not ResourceLoader.exists(path):
+		path = "res://models/chulsoo.glb"
+	model = (load(path) as PackedScene).instantiate()
+	model.scale = Vector3.ONE * 1.5
+	player.add_child(model)
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	skel = model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	bones = {}
+	for i in skel.get_bone_count():
+		bones[skel.get_bone_name(i)] = [i, skel.get_bone_rest(i).basis.get_rotation_quaternion(), skel.get_bone_global_rest(i).basis.get_rotation_quaternion()]
+
+func set_character(cid: String) -> void:
+	# 메뉴에서 친구를 바꾸면 바로 모습이 바뀌어요
+	char_id = cid
+	var w: String = Save.CHARS[cid]["weapon"]
+	mains = {w: 1}
+	main_order = [w]
+	_load_model(cid)
 
 func pose_bone(name: String, q_model: Quaternion) -> void:
 	if not bones.has(name):
@@ -1115,10 +1190,19 @@ func _animate_player(dt: float) -> void:
 	model.rotation_degrees.x = 8.0 * run_amt
 	pose_bone("spine", Q(Vector3.UP, 7.0 * s * run_amt))
 	pose_bone("head", Q(Vector3.RIGHT, -4.0 * run_amt + recoil * 6.0) * Q(Vector3.FORWARD, 3.0 * s * run_amt))
-	pose_bone("armL", Q(Vector3.RIGHT, -62.0 + recoil * 14.0) * Q(Vector3.BACK, 66.0) * Q(Vector3.UP, -18.0))
-	pose_bone("foreL", Q(Vector3.UP, -30.0))
-	pose_bone("armR", Q(Vector3.RIGHT, -55.0 + recoil * 10.0) * Q(Vector3.BACK, -70.0) * Q(Vector3.UP, 32.0))
-	pose_bone("foreR", Q(Vector3.UP, 38.0))
+	if mains.has("gun"):
+		pose_bone("armL", Q(Vector3.RIGHT, -62.0 + recoil * 14.0) * Q(Vector3.BACK, 66.0) * Q(Vector3.UP, -18.0))
+		pose_bone("foreL", Q(Vector3.UP, -30.0))
+		pose_bone("armR", Q(Vector3.RIGHT, -55.0 + recoil * 10.0) * Q(Vector3.BACK, -70.0) * Q(Vector3.UP, 32.0))
+		pose_bone("foreR", Q(Vector3.UP, 38.0))
+	else:
+		# 무기를 안 든 친구는 팔을 흔들며 달려요
+		var asw := 40.0 * run_amt
+		var cheer := recoil * 25.0
+		pose_bone("armL", Q(Vector3.RIGHT, asw * s - cheer) * Q(Vector3.BACK, 68.0 - cheer))
+		pose_bone("foreL", Q(Vector3.RIGHT, -20.0 * run_amt))
+		pose_bone("armR", Q(Vector3.RIGHT, -asw * s - cheer) * Q(Vector3.BACK, -68.0 + cheer))
+		pose_bone("foreR", Q(Vector3.RIGHT, -20.0 * run_amt))
 	var hand_t := skel.get_bone_global_pose(bones["handL"][0])
 	gun.global_position = skel.global_transform * hand_t.origin + model.global_transform.basis.orthonormalized() * Vector3(0.06, 0.02, 0.05)
 	gun.rotation = Vector3(deg_to_rad(-recoil * 18.0), model.rotation.y, 0)
@@ -1259,7 +1343,7 @@ func _spawn_logic(dt: float) -> void:
 	var pool := {}
 	for kind in KINDS:
 		if not ["boss", "relay", "pot", "ext"].has(kind) and elapsed >= kind_from(kind):
-			pool[kind] = {"paper": 5.0, "egg": 3.0, "kettle": 1.2, "eraser": 1.6, "dust": 1.0}[kind]
+			pool[kind] = {"paper": 5.0, "egg": 3.0, "kettle": 1.2, "eraser": 1.6, "dust": 1.0, "report": 1.3}[kind]
 	for i in count:
 		if enemies.size() >= MAX_ENEMY - 8:
 			return
@@ -1455,6 +1539,10 @@ func _update_enemies(dt: float) -> void:
 		if day_mod == "rain" and _in_puddle(e["pos"]):
 			sp *= 0.6
 		var want := to_p / maxf(dist, 0.01) * sp
+		if e["kind"] == "report":
+			# 성적표 귀신은 울면서 지그재그로 와요
+			var side := Vector3(-to_p.z, 0, to_p.x) / maxf(dist, 0.01)
+			want += side * sin(e["phase"] * 0.6) * sp * 1.3
 		if flee_t > 0.0 and e["kind"] != "boss":
 			want = -to_p / maxf(dist, 0.01) * sp * 1.7
 		var steer := 4.0
@@ -2491,8 +2579,8 @@ func _menu_idle(dt: float) -> void:
 	_animate_player(dt)
 	if fmod(menu_t, 2.5) < dt:
 		recoil = 1.0
-	cam.position = Vector3(sin(menu_t * 0.2) * 0.4, 2.3, 5.2)
-	cam.look_at(Vector3(0, 1.0, 0), Vector3.UP)
+	cam.position = Vector3(0.35 + sin(menu_t * 0.2) * 0.3, 1.9, 5.9)
+	cam.look_at(Vector3(0.35, 0.45, 0), Vector3.UP)
 	gun.visible = mains.has("gun")
 
 func _in_puddle(pos: Vector3) -> bool:

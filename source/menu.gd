@@ -391,8 +391,7 @@ func _friends() -> void:
 			var pick_cb := func():
 				Save.data["char"] = ccid
 				Save.save_data()
-				main.char_id = ccid
-				main.mains = {Save.CHARS[ccid]["weapon"]: 1}
+				main.set_character(ccid)
 				main._play("pick", 1.2, -3.0)
 				show_screen("friends")
 			_right_btn(row, "고르기", Color("#4fa8e8"), true, pick_cb, 170)
