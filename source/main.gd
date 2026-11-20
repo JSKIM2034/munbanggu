@@ -58,7 +58,7 @@ const BOSS_TINT := {"ground": Color(1, 1, 1), "hall": Color(0.75, 0.9, 1.35), "l
 	"toilet": Color(0.9, 1.25, 1.35), "roof": Color(1.35, 1.0, 0.7), "music": Color(1.1, 0.8, 1.4)}
 const CAM_OFFSET := Vector3(0, 14.0, 11.5)
 const RUN_TIME := 300.0
-const MAX_ENEMY := 160
+const MAX_ENEMY := 110
 const MAX_LV := 5
 
 var cam_off := CAM_OFFSET
@@ -1603,7 +1603,7 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 		return {}
 	var k: Dictionary = KINDS[kind]
 	var t := elapsed / RUN_TIME
-	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * grade_hp()
+	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * grade_hp() * (1.0 + 0.35 * clampf(t * 2.0, 0.0, 1.0))
 	if kind == "boss":
 		hpv = k["hp"] * grade_hp()
 	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
@@ -2227,6 +2227,10 @@ func _use_gacha(d: Dictionary) -> void:
 	_reward_panel("뽑기 결과!", got, coins, extra)
 
 func _drop(kind: String, pos: Vector3) -> void:
+	pos.x = clampf(pos.x, -AX + 0.4, AX - 0.4)
+	pos.z = clampf(pos.z, -AZ + 0.4, AZ - 0.4)
+	if obstacles.size() > 0:
+		pos = _push_out(pos, 0.6)
 	var mi: Node3D
 	var glb := "res://models/prop_%s.glb" % kind
 	if (kind == "gacha" or kind == "chest") and ResourceLoader.exists(glb):
@@ -2274,7 +2278,7 @@ func _update_drops(dt: float) -> void:
 		mi.rotation.y = d["t"] * 2.5
 		mi.scale = Vector3.ONE * (1.0 + 0.08 * sin(d["t"] * 8.0)) * minf(1.0, d["t"] * 4.0)
 		var dist := Vector2(player.position.x - d["pos"].x, player.position.z - d["pos"].z).length()
-		if dist < 0.9:
+		if dist < 1.2:
 			if d["kind"] == "chest":
 				mi.queue_free()
 				drops.erase(d)
@@ -2812,7 +2816,7 @@ func _update_gems(dt: float) -> void:
 				got += 1
 		else:
 			keep.append(g)
-	while keep.size() > 290:
+	while keep.size() > 110:
 		keep.pop_front()
 		got += 1
 	gems = keep
@@ -2841,12 +2845,15 @@ func hitstop(d: float) -> void:
 	hitstop_left = maxf(hitstop_left, d)
 
 func _part(kind: String, pos: Vector3, vel: Vector3, col: Color, size: float, life: float, spin := 0.0, grav := 9.0, grow := 0.0) -> void:
-	if parts.size() > 420:
+	if parts.size() > part_cap:
 		parts.pop_front()
 	var ax := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
 	parts.append({"kind": kind, "pos": pos, "vel": vel, "col": col, "size": size, "life": life, "t": 0.0, "spin": spin, "rot": rng.randf() * TAU, "grav": grav, "grow": grow, "ax": ax})
 
 func _glow(pos: Vector3, vel: Vector3, col: Color, size: float, life: float, grav := 0.0) -> void:
+	# 바쁠 때는 반짝이를 덜 만들어요
+	if parts.size() > part_cap * 0.6 and rng.randf() < 0.6:
+		return
 	_part("glow", pos, vel, col, size, life, 0.0, grav)
 
 func _ring(pos: Vector3, col: Color, r0: float, r1: float, life: float) -> void:
@@ -3121,6 +3128,29 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 # 메인 루프
 # =========================================================
 var shot_frames := 0
+var part_cap := 220
+var low_fx := false
+var slow_t := 0.0
+func _auto_quality(delta: float) -> void:
+	# 폰이 버거워하면(30프레임 아래가 2초 넘게) 스스로 가볍게 바꿔요
+	if low_fx or auto_play or shot_mode != "":
+		return
+	if delta > 1.0 / 32.0:
+		slow_t += delta
+	else:
+		slow_t = maxf(0.0, slow_t - delta * 0.5)
+	if slow_t > 2.0 or not Save.opt("fx"):
+		_set_low_fx()
+
+func _set_low_fx() -> void:
+	low_fx = true
+	part_cap = 90
+	if env_ref:
+		env_ref.glow_enabled = false
+	get_viewport().scaling_3d_scale = 0.62
+	for n in ["bglow"]:
+		if mm.has(n):
+			mm[n].visible = false
 var prof := [0,0,0,0,0,0]
 func _process(delta: float) -> void:
 	var dt := minf(delta, 0.05)
@@ -3152,6 +3182,7 @@ func _process(delta: float) -> void:
 	if in_menu:
 		_menu_idle(dt)
 		return
+	_auto_quality(delta)
 	hitstop_cool -= dt
 	if hitstop_left > 0.0:
 		hitstop_left -= dt
@@ -3210,7 +3241,7 @@ func _process(delta: float) -> void:
 	var t5 := Time.get_ticks_usec()
 	prof[0] += t1 - t0; prof[1] += t2 - t1; prof[2] += t3 - t2; prof[3] += t4 - t3; prof[4] += t5 - t4; prof[5] += 1
 	if prof[5] >= 300:
-		if perf_frames > 0: print("PROF enemies=%d en=%d weap=%d gems_fx=%d anim=%d draw=%d (us/frame)" % [enemies.size(), prof[0]/300, prof[1]/300, prof[2]/300, prof[3]/300, prof[4]/300])
+		if perf_frames > 0 or OS.get_cmdline_user_args().has("--prof"): print("PROF t=%d parts=%d gems=%d enemies=%d en=%d weap=%d gems_fx=%d anim=%d draw=%d (us/frame)" % [int(elapsed), parts.size(), gems.size(), enemies.size(), prof[0]/300, prof[1]/300, prof[2]/300, prof[3]/300, prof[4]/300])
 		prof = [0,0,0,0,0,0]
 	combo_timer -= dt
 	if combo_timer <= 0.0:
@@ -3573,13 +3604,13 @@ func _open_settings() -> void:
 	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.offset_top = 30
-	var items := [["bgm", "배경음악"], ["sfx", "효과음"], ["vib", "진동"], ["shake", "화면 흔들림"], ["nums", "데미지 숫자"]]
+	var items := [["bgm", "배경음악"], ["sfx", "효과음"], ["vib", "진동"], ["shake", "화면 흔들림"], ["nums", "데미지 숫자"], ["fx", "화려한 이펙트"]]
 	for i in items.size():
 		var key: String = items[i][0]
 		var l := _label(items[i][1], 40, Color("#3a2148"), box_p, 0)
-		l.position = Vector2(50, 140 + i * 110)
+		l.position = Vector2(50, 130 + i * 100)
 		var b := _small_btn("켜짐" if Save.opt(key) else "꺼짐", Color("#2fc79a") if Save.opt(key) else Color("#b9b0bf"), 34)
-		b.position = Vector2(370, 128 + i * 110)
+		b.position = Vector2(370, 118 + i * 100)
 		b.size = Vector2(180, 80)
 		box_p.add_child(b)
 		b.pressed.connect(func():

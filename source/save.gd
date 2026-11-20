@@ -108,7 +108,7 @@ func _ready() -> void:
 func _default() -> Dictionary:
 	return {"coins": 0, "shop": {}, "char": "chulsoo", "clears": {}, "stats": {}, "ach_claimed": [],
 		"bestiary": {}, "daily": {}, "best": {}, "runs": 0, "seen_unlock": [], "tut": {},
-		"opt": {"bgm": true, "sfx": true, "vib": true, "shake": true, "nums": true}}
+		"opt": {"bgm": true, "sfx": true, "vib": true, "shake": true, "nums": true, "fx": true}}
 
 func opt(key: String) -> bool:
 	return bool(data["opt"].get(key, true))
