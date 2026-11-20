@@ -273,7 +273,7 @@ func _stage() -> void:
 		bl.position = Vector2(30, 134)
 		if not open:
 			var need: String = s["need"]
-			var lk := L("%s 보스를 물리치면 열려요" % Save.STAGES[need]["name"], 32, Color("#8a7a95"), row)
+			var lk := L("%s %d단계까지 깨면 열려요 (지금 %d단계)" % [Save.STAGES[need]["name"], Save.UNLOCK_GRADE, int(Save.data["clears"].get(need, 0))], 30, Color("#8a7a95"), row)
 			lk.position = Vector2(30, 220)
 			continue
 		var mg := Save.max_grade(sid)

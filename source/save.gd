@@ -74,7 +74,7 @@ const ACH := [
 	{"id": "clear_roof", "name": "옥상 수호자", "desc": "옥상 보스 물리치기", "stat": "clear_roof", "goal": 1, "reward": 900},
 	{"id": "clear_music", "name": "음악실 수호자", "desc": "음악실 보스 물리치기", "stat": "clear_music", "goal": 1, "reward": 1200},
 	{"id": "weekly1", "name": "도전자", "desc": "주간 도전 참가하기", "stat": "weekly_runs", "goal": 1, "reward": 100},
-	{"id": "gacha5", "name": "뽑기 중독", "desc": "문방구 뽑기통 5번 돌리기", "stat": "gacha_total", "goal": 5, "reward": 150},
+	{"id": "gacha5", "name": "숙제 잘하는 아이", "desc": "선생님 숙제 10번 해내기", "stat": "missions_total", "goal": 10, "reward": 300},
 	{"id": "grade10", "name": "중학생 퇴마사", "desc": "아무 곳이나 10단계 클리어", "stat": "best_grade", "goal": 10, "reward": 3000},
 	{"id": "grade20", "name": "고등학생 퇴마사", "desc": "아무 곳이나 20단계 클리어", "stat": "best_grade", "goal": 20, "reward": 8000},
 	{"id": "grade50", "name": "전설의 선생님", "desc": "아무 곳이나 50단계 클리어", "stat": "best_grade", "goal": 50, "reward": 30000},
@@ -242,9 +242,11 @@ func buy_char(id: String) -> bool:
 	save_data()
 	return true
 
+const UNLOCK_GRADE := 10
 func stage_unlocked(id: String) -> bool:
 	var need: String = STAGES[id]["need"]
-	return need == "" or int(data["clears"].get(need, 0)) > 0
+	# 앞 장소를 UNLOCK_GRADE단계까지 깨야 다음 장소가 열려요 (이미 깬 곳은 그대로)
+	return need == "" or int(data["clears"].get(need, 0)) >= UNLOCK_GRADE or int(data["clears"].get(id, 0)) > 0
 
 func max_grade(id: String) -> int:
 	return mini(MAX_GRADE, int(data["clears"].get(id, 0)) + 1)
@@ -351,6 +353,7 @@ func record_run(r: Dictionary) -> Dictionary:
 	st["best_combo"] = maxi(int(st.get("best_combo", 0)), int(r["combo"]))
 	st["best_nohit"] = maxi(int(st.get("best_nohit", 0)), int(r["nohit"]))
 	st["gacha_total"] = int(st.get("gacha_total", 0)) + int(r.get("gacha", 0))
+	st["missions_total"] = int(st.get("missions_total", 0)) + int(r.get("missions", 0))
 	var weekly_new := false
 	if r.get("weekly", false):
 		st["weekly_runs"] = int(st.get("weekly_runs", 0)) + 1

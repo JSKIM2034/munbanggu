@@ -9,6 +9,8 @@ var AX := 13.0
 var AZ := 13.0
 var stage := "ground"
 var grade := 1
+var dg := 1  # 실제 난이도: 장소가 바뀔 때마다 8단계씩 더해져요
+const STAGE_STEP := 8
 var char_id := "chulsoo"
 var in_menu := false
 var obstacles: Array = []          # [중심 Vector3, 반너비 Vector2]
@@ -240,6 +242,7 @@ func _ready() -> void:
 		char_id = wc["char"]
 		day_mod = wc["mod"]
 		rng.seed = wc["seed"]
+	dg = grade + maxi(0, BOSS_ORDER.find(stage)) * (3 if weekly else STAGE_STEP)
 	for a in args:
 		if a.begins_with("--mod="):
 			day_mod = a.substr(6)
@@ -1261,7 +1264,7 @@ func _yoyo_mesh(c: Color) -> ArrayMesh:
 
 func _make_multimeshes() -> void:
 	for kind in KINDS:
-		var glb := "res://models/%s.glb" % (BOSS_MODELS.get(stage, "boss_locker") if kind == "boss" else GHOST_MODELS.get(kind, ""))
+		var glb := "res://models/%s.glb" % (BOSS_MODELS.get(boss_stage(), "boss_locker") if kind == "boss" else GHOST_MODELS.get(kind, ""))
 		if GHOST_MODELS.has(kind) and ResourceLoader.exists(glb):
 			_mm_textured(kind, glb, 4 if kind == "boss" else MAX_ENEMY)
 		else:
@@ -1505,10 +1508,29 @@ func crit_chance() -> float:
 func xp_mult() -> float:
 	return (1.0 + 0.06 * Save.shop_lv("xp") + (0.15 if char_id == "minsu" else 0.0)) * (1.3 if day_mod == "exam" else 1.0)
 func coin_mult() -> float:
-	return (1.0 + 0.1 * Save.shop_lv("coin")) * (1.0 + 0.35 * (grade - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.8) * {"rain": 1.2, "sports": 1.2, "vacation": 1.3}.get(day_mod, 1.0)
-const STAGE_MULT := {"ground": 1.0, "hall": 1.45, "lab": 2.0, "toilet": 2.5, "roof": 3.0, "music": 3.6}
+	return (1.0 + 0.1 * Save.shop_lv("coin")) * (1.0 + 0.35 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.8) * {"rain": 1.2, "sports": 1.2, "vacation": 1.3}.get(day_mod, 1.0)
+const STAGE_MULT := {"ground": 1.0, "hall": 1.05, "lab": 1.1, "toilet": 1.15, "roof": 1.2, "music": 1.25}
+const BOSS_ORDER := ["ground", "hall", "lab", "toilet", "roof", "music"]
+const BOSS_RANKS := [
+	{"pre": "", "tint": Color(1, 1, 1), "scale": 1.0},
+	{"pre": "화난 ", "tint": Color(1.7, 0.5, 0.45), "scale": 1.1},
+	{"pre": "얼음 ", "tint": Color(0.55, 1.1, 1.8), "scale": 1.15},
+	{"pre": "그림자 ", "tint": Color(0.55, 0.45, 0.8), "scale": 1.2},
+	{"pre": "황금 ", "tint": Color(1.45, 1.2, 0.5), "scale": 1.28},
+	{"pre": "전설의 ", "tint": Color(1.4, 0.6, 1.4), "scale": 1.38},
+]
+func boss_stage() -> String:
+	# 단계가 오를 때마다 다른 장소의 보스가 나와요 (1단계는 그 장소의 보스)
+	var i := BOSS_ORDER.find(stage)
+	return BOSS_ORDER[(i + grade - 1) % BOSS_ORDER.size()]
+func boss_rank() -> Dictionary:
+	# 여섯 보스를 한 바퀴 돌 때마다 색과 크기가 바뀌어요
+	return BOSS_RANKS[mini((dg - 1) / BOSS_ORDER.size(), BOSS_RANKS.size() - 1)]
+func boss_name() -> String:
+	return boss_rank()["pre"] + Save.STAGES[boss_stage()]["boss"]
+
 func grade_hp() -> float:
-	var g := float(grade - 1)
+	var g := float(dg - 1)
 	return (1.0 + 0.45 * g + 0.02 * g * g) * STAGE_MULT[stage]
 func area_mult() -> float:
 	return 1.0 + 0.15 * lv("notebook")
@@ -1623,11 +1645,11 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 		hpv = k["hp"] * grade_hp()
 	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
 		"squash": 0.0, "phase": rng.randf() * TAU, "spawn": 0.0, "dead": -1.0, "slow": 0.0, "elite": elite,
-		"speed": k["speed"] * (1.0 + t * 0.3) * (1.0 + minf(0.4, 0.02 * (grade - 1))) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
+		"speed": k["speed"] * (1.0 + t * 0.3) * (1.0 + minf(0.4, 0.02 * (dg - 1))) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
 		"dash": rng.randf_range(1.5, 3.5), "dash_t": 0.0, "summon": 3.0}
 	if k.has("prop"):
 		e["prop"] = true
-		e["hp"] = k["hp"] * (1.0 + 0.3 * (grade - 1))
+		e["hp"] = k["hp"] * (1.0 + 0.3 * (dg - 1))
 	if elite:
 		e["hp"] *= 9.0
 		e["scale"] *= 1.55
@@ -1644,7 +1666,7 @@ func _spawn_logic(dt: float) -> void:
 		return
 	var t := elapsed / RUN_TIME
 	spawn_timer = lerpf(1.1, 0.3, clampf(t * 1.3, 0, 1))
-	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (grade - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4))
+	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4))
 	if boss_spawned:
 		count = maxi(1, count / 3)
 	# 시간이 지날수록 센 귀신이 섞여요
@@ -1698,6 +1720,121 @@ var next_elite := 40.0
 var boss_spawned := false
 var boss: Dictionary = {}
 var boss_warned := false
+var mission := {}
+var mission_label: Label
+var mission_zone: MeshInstance3D
+var missions_done := 0
+func _start_mission() -> void:
+	var kinds := ["kills", "nohit", "zone", "combo"]
+	var k: String = kinds[rng.randi() % kinds.size()]
+	mission = {"kind": k, "t": 0.0, "prog": 0, "start_kills": kills}
+	match k:
+		"kills":
+			mission["goal"] = 25 + mini(dg, 10) * 2
+			mission["time"] = 25.0
+			mission["text"] = "숙제 검사! %d초 안에 귀신 %d마리"
+		"nohit":
+			mission["goal"] = 15
+			mission["time"] = 15.0
+			mission["text"] = "숙제 검사! %d초 동안 한 대도 안 맞기"
+		"zone":
+			mission["goal"] = 8
+			mission["time"] = 25.0
+			var a := rng.randf() * TAU
+			var zp := player.position + Vector3(cos(a), 0, sin(a)) * 5.0
+			zp.x = clampf(zp.x, -AX + 2.0, AX - 2.0)
+			zp.z = clampf(zp.z, -AZ + 2.0, AZ - 2.0)
+			mission["pos"] = _push_out(zp, 2.0)
+			mission["text"] = "숙제 검사! 노란 동그라미 안에서 %d초 버티기"
+			mission_zone = MeshInstance3D.new()
+			mission_zone.mesh = _cyl(1.0, 0.04, -1, 40)
+			var m := StandardMaterial3D.new()
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.albedo_color = Color(1.0, 0.85, 0.2, 0.35)
+			m.no_depth_test = true
+			mission_zone.material_override = m
+			mission_zone.position = mission["pos"] + Vector3(0, 0.05, 0)
+			mission_zone.scale = Vector3(2.2, 1, 2.2)
+			add_child(mission_zone)
+		"combo":
+			mission["goal"] = 40 + mini(dg, 10) * 3
+			mission["time"] = 30.0
+			mission["text"] = "숙제 검사! %d초 안에 %d콤보 만들기"
+	_banner("선생님이 숙제를 냈어요!", Color("#6ee0b0"))
+	_play("bell", 1.3, -4.0)
+	if mission_label == null:
+		mission_label = _label("", 30, Color("#fff8e8"), hud, 9)
+		mission_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+		mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		mission_label.offset_left = -340
+		mission_label.offset_right = 340
+		mission_label.offset_top = 170
+		mission_label.offset_bottom = 260
+	mission_label.visible = true
+
+func _update_mission(dt: float) -> void:
+	if mission.is_empty():
+		return
+	mission["t"] += dt
+	var left: float = mission["time"] - mission["t"]
+	var done := false
+	var line := ""
+	match mission["kind"]:
+		"kills":
+			mission["prog"] = kills - int(mission["start_kills"])
+			done = mission["prog"] >= mission["goal"]
+			line = "귀신 %d / %d   남은 시간 %d초" % [mini(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
+		"nohit":
+			if nohit_t < mission["t"] - 0.05:
+				_end_mission(false)
+				return
+			mission["prog"] = int(mission["t"])
+			done = mission["t"] >= mission["goal"]
+			line = "안 맞고 %d / %d초" % [mini(mission["prog"], mission["goal"]), mission["goal"]]
+		"zone":
+			var zp: Vector3 = mission["pos"]
+			var inside := Vector2(player.position.x - zp.x, player.position.z - zp.z).length() < 2.2
+			if inside:
+				mission["prog"] = float(mission["prog"]) + dt
+			if mission_zone:
+				var m: StandardMaterial3D = mission_zone.material_override
+				m.albedo_color = Color(0.4, 1.0, 0.5, 0.45) if inside else Color(1.0, 0.85, 0.2, 0.3 + 0.15 * sin(elapsed * 6.0))
+			done = float(mission["prog"]) >= mission["goal"]
+			line = "동그라미 안 %.1f / %d초   남은 시간 %d초" % [minf(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
+		"combo":
+			mission["prog"] = maxi(int(mission["prog"]), combo)
+			done = mission["prog"] >= mission["goal"]
+			line = "최고 %d / %d콤보   남은 시간 %d초" % [mini(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
+	var head: String = mission["text"]
+	var n := head.count("%d")
+	if n == 2:
+		head = head % [int(mission["time"]), mission["goal"]]
+	else:
+		head = head % [mission["goal"]]
+	mission_label.text = head + "\n" + line
+	if done:
+		_end_mission(true)
+	elif left <= 0.0 and mission["kind"] != "nohit":
+		_end_mission(false)
+
+func _end_mission(ok: bool) -> void:
+	if mission_zone:
+		mission_zone.queue_free()
+		mission_zone = null
+	mission = {}
+	mission_label.visible = false
+	if ok:
+		missions_done += 1
+		_banner("참 잘했어요! 보물 상자!", Color("#ffdf3d"))
+		_play("evo", 1.2, -3.0)
+		_drop("chest", player.position + Vector3(1.2, 0, 0))
+		_ring(player.position, Color(1.0, 0.85, 0.3, 1.0), 0.3, 3.0, 0.6)
+		_sparkle(player.position + Vector3(0, 1, 0), Color(1.0, 0.9, 0.4, 1.0), 20, 6.0, 0.15, 0.7)
+	else:
+		_banner("숙제를 못 했어요...", Color("#b9b0bf"))
+		_play("ui_error", 1.0, -4.0)
+
 func _spawn_props(n: int) -> void:
 	var alive := 0
 	for e in enemies:
@@ -1729,23 +1866,17 @@ func _event_logic() -> void:
 	if elapsed >= next_props:
 		next_props += 55.0
 		_spawn_props(3)
-	# 문방구 뽑기통
-	for at in [75.0, boss_time - 50.0]:
-		if elapsed >= at and _once("gacha%d" % int(at)):
-			var a := rng.randf() * TAU
-			var gp := player.position + Vector3(cos(a), 0, sin(a)) * 4.0
-			gp.x = clampf(gp.x, -AX + 0.8, AX - 0.8)
-			gp.z = clampf(gp.z, -AZ + 0.8, AZ - 0.8)
-			gp = _push_out(gp, 0.8)
-			_drop("gacha", gp)
-			_banner("문방구 뽑기통이 나타났어요!\n동전으로 돌려 봐요", Color("#ff9a2f"))
-			_play("coin", 0.8, -3.0)
+	# 선생님의 숙제 검사: 짧은 미션을 깨면 보물 상자
+	for at in [60.0, 140.0, boss_time - 45.0]:
+		if elapsed >= at and _once("mission%d" % int(at)) and mission.is_empty():
+			_start_mission()
+	_update_mission(dt)
 	# 급식 시간: 하트 잔치
 	if elapsed >= 120.0 and _once("lunch"):
 		_banner("급식 시간! 하트를 먹어요", Color("#ff5c7a"))
 		_play("level", 1.0, -3.0)
-		for i in 3:
-			var a := TAU * i / 3.0 + rng.randf()
+		for i in 2:
+			var a := TAU * i / 2.0 + rng.randf()
 			var hp_pos := player.position + Vector3(cos(a), 0, sin(a)) * 3.0
 			hp_pos.x = clampf(hp_pos.x, -AX + 0.5, AX - 0.5)
 			hp_pos.z = clampf(hp_pos.z, -AZ + 0.5, AZ - 0.5)
@@ -1812,7 +1943,7 @@ func _event_logic() -> void:
 		_play("warn", 1.4, -10.0)
 	if elapsed >= boss_time - 5.0 and not boss_warned:
 		boss_warned = true
-		_banner(Save.STAGES[stage]["boss"] + "이 와요!", Color("#ff7aa8"))
+		_banner(boss_name() + "이 와요!", Color("#ff7aa8"))
 		_play("warn", 1.0, 0.0)
 	if elapsed >= boss_time and not boss_spawned:
 		boss_spawned = true
@@ -1821,6 +1952,8 @@ func _event_logic() -> void:
 			p.z = player.position.z + 8.0
 		p.x = clampf(p.x, -AX, AX)
 		boss = _make_enemy("boss", p)
+		boss["scale"] *= boss_rank()["scale"]
+		boss["radius"] *= boss_rank()["scale"]
 		shake = 0.5
 		_play_bgm("boss")
 
@@ -1964,9 +2097,9 @@ func _kill_enemy(e: Dictionary) -> void:
 		_burst(pp + Vector3(0, 0.5, 0), Color("#fff27a"), 6, 5.0, true)
 		_play("pop", 0.7, -3.0)
 		var r := rng.randf()
-		if r < 0.3:
+		if r < 0.1:
 			_drop("heart", pp)
-		elif r < 0.45:
+		elif r < 0.3:
 			_drop("magnet", pp)
 		elif r < 0.75:
 			for i in 4:
@@ -2014,12 +2147,13 @@ func _kill_enemy(e: Dictionary) -> void:
 	# 하트,자석,보물 상자 떨어뜨리기
 	if e["elite"]:
 		_drop("chest", pos + Vector3(0.5, 0, 0))
-		_drop("heart", pos + Vector3(-0.5, 0, 0))
+		if rng.randf() < 0.35:
+			_drop("heart", pos + Vector3(-0.5, 0, 0))
 	elif e["kind"] != "boss":
 		var r := rng.randf()
-		if r < 0.012:
+		if r < 0.004:
 			_drop("heart", pos)
-		elif r < 0.019:
+		elif r < 0.011:
 			_drop("magnet", pos)
 	if e["kind"] == "boss":
 		hitstop(0.25)
@@ -2058,12 +2192,12 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 			# 부르르 떨다가 실내화를 사방으로 던져요
 			e["squash"] = 0.4 + 0.2 * sin(elapsed * 50.0)
 			if e["pat_t"] <= 0.0:
-				var n := 12 + grade + (4 if angry else 0)
+				var n := 12 + dg + (4 if angry else 0)
 				var off := rng.randf() * TAU
 				for i in n:
 					var a := off + TAU * i / n
 					var dv := Vector3(cos(a), 0, sin(a))
-					eshots.append({"pos": e["pos"] + dv * 1.2 + Vector3(0, 0.6, 0), "vel": dv * (4.2 + 0.2 * grade), "life": 5.0, "rot": a})
+					eshots.append({"pos": e["pos"] + dv * 1.2 + Vector3(0, 0.6, 0), "vel": dv * (4.2 + 0.2 * dg), "life": 5.0, "rot": a})
 				_play("blast", 0.7, -4.0)
 				shake = maxf(shake, 0.25)
 				e["stage"] += 1
@@ -2104,8 +2238,8 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 			return [Vector3.ZERO, 6.0]
 		"summon":
 			if e["pat_t"] <= 0.0:
-				for j in 6 + grade:
-					var a := TAU * j / (6 + grade)
+				for j in 6 + dg:
+					var a := TAU * j / (6 + dg)
 					_make_enemy("dust", e["pos"] + Vector3(cos(a), 0, sin(a)) * 2.2)
 				_play("warn", 1.6, -8.0)
 				_boss_rest(e, angry)
@@ -2268,7 +2402,7 @@ func _drop(kind: String, pos: Vector3) -> void:
 	var d := {"node": mi, "kind": kind, "pos": pos + Vector3(0, 0.5, 0), "t": 0.0}
 	if kind == "gacha":
 		d["pos"] = pos
-		d["cost"] = int(round(10 * (1.0 + 0.35 * (grade - 1))))
+		d["cost"] = int(round(10 * (1.0 + 0.35 * (dg - 1))))
 		d["inside"] = false
 		var lb := Label3D.new()
 		lb.font = font
@@ -2974,8 +3108,10 @@ func _sync_draw() -> void:
 		var tint := Color(1, 1, 1)
 		if e["elite"]:
 			tint = Color(1.25, 1.05, 0.55).lerp(Color(1.4, 1.3, 0.9), 0.5 + 0.5 * sin(elapsed * 6.0))
-		if e["kind"] == "boss" and not ResourceLoader.exists("res://models/%s.glb" % BOSS_MODELS.get(stage, "")):
-			tint = BOSS_TINT[stage]
+		if e["kind"] == "boss":
+			var rk := boss_rank()
+			var bt: Color = rk["tint"]
+			tint = bt.lerp(bt * 1.25, 0.5 + 0.5 * sin(elapsed * 3.0)) if rk["pre"] != "" else bt
 		if e["kind"] == "eraser" and e["dash_t"] > 0.45:
 			tint = Color(1.4, 0.8, 0.8)
 		var tr := Transform3D(Basis(Vector3.UP, e["rot"]).scaled(scl), e["pos"] + Vector3(0, hop * 0.12, 0))
@@ -3226,6 +3362,7 @@ func _process(delta: float) -> void:
 		return
 	elapsed += dt
 	_evo_aura(dt)
+	_boss_aura()
 	if boss_spawned and not boss.is_empty() and elapsed > boss_time + 60.0:
 		boss["speed"] = KINDS["boss"]["speed"] * 2.0   # 1분 안에 못 잡으면 화나요
 	_read_input()
@@ -3726,7 +3863,7 @@ func _update_hud() -> void:
 			boss_bar.size = Vector2(508, 22)
 			boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			boss_bar_bg.add_child(boss_bar)
-			var bl := _label(Save.STAGES[stage]["boss"], 26, Color.WHITE, boss_bar_bg, 7)
+			var bl := _label(boss_name(), 26, Color.WHITE, boss_bar_bg, 7)
 			bl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -4259,6 +4396,18 @@ func _evo_boom() -> void:
 		elif e["kind"] == "boss":
 			_hit_enemy(e, 400.0, d, 3.0, true)
 
+func _boss_aura() -> void:
+	if boss.is_empty() or boss["dead"] >= 0.0 or boss_rank()["pre"] == "":
+		return
+	if Engine.get_process_frames() % 3 == 0:
+		var bt: Color = boss_rank()["tint"]
+		var a := rng.randf() * TAU
+		var bp: Vector3 = boss["pos"]
+		_glow(bp + Vector3(cos(a) * 1.6, 0.2, sin(a) * 1.6), Vector3(0, rng.randf_range(2, 4), 0), Color(bt.r * 0.6, bt.g * 0.6, bt.b * 0.6, 0.8), 0.25, 0.7, -1.0)
+	if Engine.get_process_frames() % 40 == 0:
+		var bt2: Color = boss_rank()["tint"]
+		_ring(boss["pos"], Color(bt2.r * 0.6, bt2.g * 0.6, bt2.b * 0.6, 0.8), 1.0, 3.0, 0.7)
+
 func _evo_aura(dt: float) -> void:
 	# 진화한 무기가 있으면 발밑에 빛 고리와 반짝이가 늘 따라다녀요
 	var n := evolved.size()
@@ -4293,18 +4442,18 @@ func _end_game(win: bool) -> void:
 		return
 	game_over = true
 	_play("evo" if win else "hurt", 0.8, 0.0)
-	var bonus := int(round((60 + 40 * grade) * (1.0 + 0.1 * Save.shop_lv("coin")))) if win else 0
+	var bonus := int(round((60 + 40 * dg) * (1.0 + 0.1 * Save.shop_lv("coin")))) if win else 0
 	bonus += int(kills / 14.0 * (1.0 + 0.1 * Save.shop_lv("coin")))
 	run_coins += bonus
 	var result := {"stage": stage, "grade": grade, "win": win, "kills": kills, "elites": elites_killed, "evos": evolved.size(),
 		"gems": gems_got, "coins": run_coins, "combo": best_combo, "nohit": int(best_nohit), "time": int(elapsed),
-		"chests": chests_opened, "kinds": kinds_killed, "gacha": gacha_used, "weekly": weekly,
+		"chests": chests_opened, "kinds": kinds_killed, "gacha": gacha_used, "missions": missions_done, "weekly": weekly,
 		"score": kills + int(elapsed) * 3 + (3000 if win else 0)}
 	var rec := {"news": []}
 	if not auto_play and shot_mode == "":
 		rec = Save.record_run(result)
 	if auto_play:
-		print("END stage=%s mod=%s gacha=%d coins=%d chests=%d elites=%d " % [stage, day_mod, gacha_used, run_coins, chests_opened, elites_killed] + "win=%s t=%d kills=%d lv=%d mains=%s sup=%s evo=%s" % [win, int(elapsed), kills, level, mains, supports, evolved.keys()])
+		print("END missions=%d " % missions_done + "stage=%s mod=%s gacha=%d coins=%d chests=%d elites=%d " % [stage, day_mod, gacha_used, run_coins, chests_opened, elites_killed] + "win=%s t=%d kills=%d lv=%d mains=%s sup=%s evo=%s" % [win, int(elapsed), kills, level, mains, supports, evolved.keys()])
 		get_tree().quit()
 		return
 	end_panel = Control.new()
@@ -4550,6 +4699,9 @@ func _setup_shot() -> void:
 	if shot_mode == "boss":
 		boss_spawned = true
 		boss = _make_enemy("boss", Vector3(0, 0, -4))
+		boss["scale"] *= boss_rank()["scale"]
+		boss["radius"] *= boss_rank()["scale"]
+		_banner(boss_name() + "이 와요!", Color("#ff7aa8"))
 		boss["pat"] = "shoes"
 		boss["pat_t"] = 0.9
 		boss["stage"] = 0
@@ -4652,9 +4804,12 @@ func _setup_shot() -> void:
 		run_coins = 96
 		evolved["gun"] = true
 		_end_game(false)
-	if shot_mode == "gacha":
-		run_coins = 50
-		_drop("gacha", Vector3(0, 0, 0.5))
+	if shot_mode == "mission":
+		while true:
+			_start_mission()
+			if mission["kind"] == "zone":
+				break
+			_end_mission(false)
 	if shot_mode == "chest":
 		mains["ddakji"] = 2
 		main_order.append("ddakji")
