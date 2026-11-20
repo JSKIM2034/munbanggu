@@ -1066,6 +1066,36 @@ func _enemy_mesh(kind: String) -> ArrayMesh:
 			L.append([_sph(0.07, -1, 8, 4), T(Vector3(sx * 0.12, 0.07, 0.0)), col.darkened(0.15)])
 	return merge(L)
 
+func _star3d() -> ArrayMesh:
+	# 통통한 5각 별 (앞뒤로 볼록), 크기 약 0.14
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var pts: Array = []
+	for i in 10:
+		var a := PI / 2 + TAU * i / 10.0
+		var r := 0.075 if i % 2 == 0 else 0.032
+		pts.append(Vector3(cos(a) * r, sin(a) * r, 0))
+	for side in [1.0, -1.0]:
+		var top := Vector3(0, 0, 0.035 * side)
+		for i in 10:
+			var a: Vector3 = pts[i]
+			var b: Vector3 = pts[(i + 1) % 10]
+			var tri := [top, a, b] if side > 0 else [top, b, a]
+			var n: Vector3 = ((tri[1] - tri[0]) as Vector3).cross(tri[2] - tri[0]).normalized()
+			for v in tri:
+				verts.append(v)
+				norms.append(n)
+				cols.append(Color.WHITE)
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = norms
+	arr[Mesh.ARRAY_COLOR] = cols
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return am
+
 func _paper_plane(c1: Color, c2: Color, crane := false) -> ArrayMesh:
 	# 앞이 -Z(look_at 기준)인 종이비행기: 날개 두 장 + 아래 용골
 	var nose := Vector3(0, 0, -0.32)
@@ -1170,8 +1200,22 @@ void fragment(){
   ALBEDO = c; ALPHA = cu.a * (0.55 + 0.45 * f);
 }
 """)
-	_mm("drop", _sph(1.0, -1, 6, 3), 260, false)
-	_mm("star", _box(Vector3(0.12, 0.12, 0.02)), 160, false)
+	_mm("drop", _sph(1.0, -1, 10, 5), 260, false)
+	(mm["drop"].material_override as ShaderMaterial).shader = _fx_shader("""
+shader_type spatial;
+render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){ ALBEDO = cu.rgb; ROUGHNESS = 0.08; METALLIC = 0.0; EMISSION = cu.rgb * 0.15; ALPHA = cu.a; }
+""")
+	_mm("star", _star3d(), 200, false)
+	(mm["star"].material_override as ShaderMaterial).shader = _fx_shader("""
+shader_type spatial;
+render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){ ALBEDO = cu.rgb; ROUGHNESS = 0.35; METALLIC = 0.0; EMISSION = cu.rgb * 0.25; ALPHA = cu.a; }
+""")
 	# 빛나는 알갱이(더하기 섞기), 퍼지는 고리, 뭉게구름
 	_mm("glow", _sph(1.0, -1, 10, 5), 320, false)
 	(mm["glow"].material_override as ShaderMaterial).shader = _fx_shader("""
@@ -1183,28 +1227,26 @@ void fragment(){ float f = pow(clamp(dot(NORMAL, VIEW), 0.0, 1.0), 1.6); ALBEDO 
 """)
 	_mm("bglow", _sph(1.0, -1, 10, 5), 80, false)
 	(mm["bglow"].material_override as ShaderMaterial).shader = (mm["glow"].material_override as ShaderMaterial).shader
-	var rq := PlaneMesh.new()
-	rq.size = Vector2(2, 2)
-	_mm("ring", rq, 90, false)
+	var tor := TorusMesh.new()
+	tor.inner_radius = 0.9
+	tor.outer_radius = 1.0
+	tor.rings = 40
+	tor.ring_segments = 8
+	_mm("ring", tor, 90, false)
 	(mm["ring"].material_override as ShaderMaterial).shader = _fx_shader("""
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+render_mode blend_mix, depth_draw_never, cull_back, specular_schlick_ggx;
 varying vec4 cu;
 void vertex(){ cu = INSTANCE_CUSTOM; }
-void fragment(){
-  float d = length(UV - 0.5) * 2.0;
-  float a = smoothstep(0.62, 0.86, d) * (1.0 - smoothstep(0.9, 1.0, d));
-  float inner = (1.0 - smoothstep(0.0, 0.9, d)) * 0.05;
-  ALBEDO = cu.rgb; ALPHA = (a + inner) * cu.a;
-}
+void fragment(){ ALBEDO = cu.rgb; ROUGHNESS = 0.2; EMISSION = cu.rgb * 0.7; ALPHA = cu.a; }
 """)
 	_mm("puff", _sph(1.0, -1, 10, 5), 140, false)
 	(mm["puff"].material_override as ShaderMaterial).shader = _fx_shader("""
 shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
+render_mode blend_mix, depth_draw_never, cull_back;
 varying vec4 cu;
 void vertex(){ cu = INSTANCE_CUSTOM; }
-void fragment(){ float f = pow(clamp(dot(NORMAL, VIEW), 0.0, 1.0), 0.8); ALBEDO = cu.rgb; ALPHA = f * cu.a; }
+void fragment(){ float f = pow(clamp(dot(NORMAL, VIEW), 0.0, 1.0), 0.5); ALBEDO = cu.rgb; ROUGHNESS = 1.0; ALPHA = f * cu.a; }
 """)
 	# 동그란 그림자
 	var q := PlaneMesh.new()
@@ -1822,9 +1864,9 @@ func _kill_enemy(e: Dictionary) -> void:
 	var big: bool = e["elite"] or e["kind"] == "boss"
 	_burst(pos + Vector3(0, 0.6, 0), col, 16 if big else 7, 6.0 if big else 4.5)
 	var confetti := [Color("#ff7aa8"), Color("#ffd23f"), Color("#6ee0b0"), Color("#58c6f2"), Color("#c9a8f0")]
-	for i in (18 if big else 4):
+	for i in (22 if big else 6):
 		var cv := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.8, 1.6), rng.randf_range(-1, 1)).normalized() * rng.randf_range(3.0, 6.5)
-		_part("star", pos + Vector3(0, 0.6, 0), cv, confetti[rng.randi() % confetti.size()], 1.0, 0.6, rng.randf_range(-14, 14))
+		_part("star", pos + Vector3(0, 0.6, 0), cv, confetti[rng.randi() % confetti.size()], 1.0, 1.0, rng.randf_range(-14, 14), 14.0)
 	for i in (6 if big else 2):
 		_puff(pos + Vector3(rng.randf_range(-0.3, 0.3), 0.5, rng.randf_range(-0.3, 0.3)), 0.28 * (1.8 if big else 1.0), 0.45)
 	_ring(pos, Color(col.r, col.g, col.b, 0.9), 0.2, 1.6 if not big else 4.0, 0.4 if not big else 0.7)
@@ -2441,6 +2483,10 @@ func _pop_explode(at: Vector3, r: float, dmg: float, evo: bool) -> void:
 		var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.3, 1.6), rng.randf_range(-1, 1)).normalized() * r * rng.randf_range(3.0, 5.0)
 		var c: Color = cols[i % cols.size()]
 		_glow(at + Vector3(0, 0.4, 0), v, Color(c.r, c.g, c.b, 1.0), rng.randf_range(0.1, 0.18), rng.randf_range(0.35, 0.6), 7.0)
+	for i in (14 if evo else 7):
+		var v2 := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.8, 1.8), rng.randf_range(-1, 1)).normalized() * rng.randf_range(4.0, 7.0)
+		var c2: Color = cols[i % cols.size()]
+		_part("star", at + Vector3(0, 0.4, 0), v2, c2, 1.0, 0.9, rng.randf_range(-16, 16), 14.0)
 	for i in (3 if evo else 2):
 		_puff(at + Vector3(0, 0.3, 0), 0.3 * r, 0.5, Color(0.6, 0.55, 0.5, 0.55))
 	_play("blast", rng.randf_range(1.2, 1.5), -6.0)
@@ -2638,7 +2684,8 @@ func hitstop(d: float) -> void:
 func _part(kind: String, pos: Vector3, vel: Vector3, col: Color, size: float, life: float, spin := 0.0, grav := 9.0, grow := 0.0) -> void:
 	if parts.size() > 420:
 		parts.pop_front()
-	parts.append({"kind": kind, "pos": pos, "vel": vel, "col": col, "size": size, "life": life, "t": 0.0, "spin": spin, "rot": 0.0, "grav": grav, "grow": grow})
+	var ax := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+	parts.append({"kind": kind, "pos": pos, "vel": vel, "col": col, "size": size, "life": life, "t": 0.0, "spin": spin, "rot": rng.randf() * TAU, "grav": grav, "grow": grow, "ax": ax})
 
 func _glow(pos: Vector3, vel: Vector3, col: Color, size: float, life: float, grav := 0.0) -> void:
 	_part("glow", pos, vel, col, size, life, 0.0, grav)
@@ -2818,7 +2865,14 @@ func _sync_draw() -> void:
 		if kind == "puff" or kind == "glow":
 			vel *= damp
 		p["vel"] = vel
-		p["pos"] += vel * dt
+		var np: Vector3 = p["pos"] + vel * dt
+		if (kind == "star" or kind == "drop") and np.y < 0.05 and vel.y < 0.0:
+			# 땅에 톡 튕겨요
+			np.y = 0.05
+			vel = Vector3(vel.x * 0.6, -vel.y * 0.45, vel.z * 0.6)
+			p["vel"] = vel
+			p["spin"] *= 0.6
+		p["pos"] = np
 		if kind == "star":
 			p["rot"] += p["spin"] * dt
 		keep.append(p)
@@ -2837,8 +2891,9 @@ func _sync_draw() -> void:
 					continue
 				var e := 1.0 - pow(k, 3.0)
 				var r: float = lerpf(p["size"], p["grow"], e)
-				rm.set_instance_transform(rn, Transform3D(Basis().scaled(Vector3(r, 1, r)), p["pos"]))
-				rm.set_instance_custom_data(rn, Color(c.r, c.g, c.b, c.a * k))
+				var th := 0.15 + 2.2 * k
+				rm.set_instance_transform(rn, Transform3D(Basis().scaled(Vector3(r, th * 3.0, r)), p["pos"] + Vector3(0, 0.1 + 0.4 * e, 0)))
+				rm.set_instance_custom_data(rn, Color(c.r, c.g, c.b, c.a * minf(1.0, k * 1.6)))
 				rn += 1
 				continue
 			"puff":
@@ -2852,14 +2907,16 @@ func _sync_draw() -> void:
 		if p["kind"] == "star":
 			if sn >= 160:
 				continue
-			stm.set_instance_transform(sn, Transform3D(Basis(Vector3.BACK, p["rot"] + 0.785).scaled(Vector3.ONE * k * 1.3), p["pos"]))
-			stm.set_instance_custom_data(sn, p["col"])
+			var sk := minf(1.0, k * 3.0)
+			stm.set_instance_transform(sn, Transform3D(Basis(p["ax"], p["rot"]).scaled(Vector3.ONE * sk * 2.3), p["pos"]))
+			stm.set_instance_color(sn, Color.WHITE)
+			stm.set_instance_custom_data(sn, Color(c.r, c.g, c.b, 1.0))
 			sn += 1
 		else:
 			if dn >= 260:
 				continue
-			dm.set_instance_transform(dn, Transform3D(Basis().scaled(Vector3.ONE * p["size"] * k), p["pos"]))
-			dm.set_instance_custom_data(dn, p["col"])
+			dm.set_instance_transform(dn, Transform3D(Basis().scaled(Vector3.ONE * p["size"] * minf(1.0, k * 2.5) * 1.2), p["pos"]))
+			dm.set_instance_custom_data(dn, Color(c.r, c.g, c.b, 1.0))
 			dn += 1
 	parts = keep
 	dm.visible_instance_count = dn
