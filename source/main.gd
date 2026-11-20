@@ -687,7 +687,7 @@ func _world_ground() -> void:
 			var c := Color(0.88, 0.75, 0.57).lerp(Color(0.78, 0.63, 0.45), v * 0.7) * (0.95 + g * 0.08)
 			img.set_pixel(x, y, c)
 	img.generate_mipmaps()
-	var tex := ImageTexture.create_from_image(img)
+	var tex: Texture2D = ImageTexture.create_from_image(img)
 	var ground := PlaneMesh.new()
 	ground.size = Vector2(70, 70)
 	var sm := ShaderMaterial.new()
@@ -699,7 +699,7 @@ uniform sampler2D tex : repeat_enable, filter_linear_mipmap;
 varying vec2 wp;
 void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX,1.0)).xz; }
 void fragment(){
-  vec3 c = texture(tex, wp * 0.09).rgb;
+  vec3 c = texture(tex, wp / 7.0).rgb;
   float ex = wp.x/11.0; float ez = wp.y/8.0;
   float d = sqrt(ex*ex + ez*ez);
   float w = fwidth(d) * 1.2 + 0.006;
@@ -712,6 +712,8 @@ void fragment(){
 }
 """
 	sm.shader = sh
+	if ResourceLoader.exists("res://textures/floor_ground.jpg"):
+		tex = load("res://textures/floor_ground.jpg")
 	sm.set_shader_parameter("tex", tex)
 	var gi := MeshInstance3D.new()
 	gi.mesh = ground
@@ -768,7 +770,8 @@ func _world_toilet(e: Environment, sun: DirectionalLight3D) -> void:
 	# 화장실: 위아래로 칸막이 줄, 가운데는 넓은 통로
 	e.background_color = Color("#2a3440")
 	e.ambient_light_energy = 0.48
-	_tile_floor(Vector2(30, 30), Color(0.86, 0.93, 0.97), Color(0.7, 0.84, 0.92), 0.6)
+	if not _tex_floor(Vector2(30, 30), "res://textures/floor_toilet.jpg", 6.0):
+		_tile_floor(Vector2(30, 30), Color(0.86, 0.93, 0.97), Color(0.7, 0.84, 0.92), 0.6)
 	var L: Array = []
 	for side in [-1.0, 1.0]:
 		L.append([_box(Vector3(0.4, 3.0, 20)), T(Vector3(side * (AX + 0.9), 1.5, 0)), Color("#dfe9ef")])
@@ -794,7 +797,8 @@ func _world_roof(e: Environment, sun: DirectionalLight3D) -> void:
 	# 옥상: 초록 방수 페인트 바닥, 낮은 난간, 물탱크
 	e.background_color = Color("#8cc8f0")
 	e.ambient_light_energy = 0.42
-	_tile_floor(Vector2(AX * 2 + 2.4, AZ * 2 + 2.4), Color(0.45, 0.62, 0.48), Color(0.48, 0.66, 0.5), 2.0)
+	if not _tex_floor(Vector2(AX * 2 + 2.4, AZ * 2 + 2.4), "res://textures/floor_roof.jpg", 8.0):
+		_tile_floor(Vector2(AX * 2 + 2.4, AZ * 2 + 2.4), Color(0.45, 0.62, 0.48), Color(0.48, 0.66, 0.5), 2.0)
 	var L: Array = []
 	var ring := 0.0
 	while ring <= 1.0:
@@ -825,7 +829,8 @@ func _world_music(e: Environment, sun: DirectionalLight3D) -> void:
 	e.background_color = Color("#3a2440")
 	e.ambient_light_color = Color("#ffe1f0")
 	e.ambient_light_energy = 0.46
-	_tile_floor(Vector2(30, 30), Color(0.72, 0.52, 0.34), Color(0.66, 0.47, 0.3), 0.8)
+	if not _tex_floor(Vector2(30, 30), "res://textures/floor_music.jpg", 7.0):
+		_tile_floor(Vector2(30, 30), Color(0.72, 0.52, 0.34), Color(0.66, 0.47, 0.3), 0.8)
 	var L: Array = []
 	for side in [-1.0, 1.0]:
 		L.append([_box(Vector3(0.4, 3.0, 23)), T(Vector3(side * (AX + 1.0), 1.5, 0)), Color("#f3e0f0")])
@@ -857,6 +862,30 @@ func _world_music(e: Environment, sun: DirectionalLight3D) -> void:
 	wi.mesh = merge(L)
 	wi.material_override = mat_vc
 	add_child(wi)
+
+func _tex_floor(size: Vector2, path: String, span: float) -> bool:
+	# 그림 바닥: span 미터마다 한 장씩 반복해요
+	if not ResourceLoader.exists(path):
+		return false
+	var pm := PlaneMesh.new()
+	pm.size = size
+	var sm := ShaderMaterial.new()
+	sm.shader = _fx_shader("""
+shader_type spatial;
+render_mode specular_disabled;
+uniform sampler2D tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform float span;
+varying vec2 wp;
+void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX,1.0)).xz; }
+void fragment(){ ALBEDO = texture(tex, wp / span).rgb; ROUGHNESS = 0.85; }
+""")
+	sm.set_shader_parameter("tex", load(path))
+	sm.set_shader_parameter("span", span)
+	var mi := MeshInstance3D.new()
+	mi.mesh = pm
+	mi.material_override = sm
+	add_child(mi)
+	return true
 
 func _tile_floor(size: Vector2, c1: Color, c2: Color, tile: float, center := Vector3.ZERO) -> void:
 	var pm := PlaneMesh.new()
@@ -894,7 +923,8 @@ func _world_hall(e: Environment, sun: DirectionalLight3D) -> void:
 	# 길고 좁은 학교 복도: 왼쪽 창문, 오른쪽 사물함
 	e.background_color = Color("#2d2a3a")
 	e.ambient_light_energy = 0.5
-	_tile_floor(Vector2(12, 70), Color(0.78, 0.86, 0.72), Color(0.92, 0.9, 0.82), 1.0)
+	if not _tex_floor(Vector2(12, 70), "res://textures/floor_hall.jpg", 7.0):
+		_tile_floor(Vector2(12, 70), Color(0.78, 0.86, 0.72), Color(0.92, 0.9, 0.82), 1.0)
 	var L: Array = []
 	var W := AX + 0.75
 	for side in [-1.0, 1.0]:
