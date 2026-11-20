@@ -21,15 +21,26 @@ var gun: Node3D
 var bones := {}
 
 # ---------- 스킬 정의 ----------
+# 귀신 종류: 체력, 속도, 반지름, 크기, 딱지 수, 색, 나오기 시작하는 시간(초)
+const KINDS := {
+	"paper": {"hp": 24.0, "speed": 1.6, "r": 0.45, "scale": 1.25, "xp": 1, "col": "#c9a8f0", "from": 0.0},
+	"egg": {"hp": 13.0, "speed": 2.8, "r": 0.4, "scale": 1.25, "xp": 1, "col": "#a9d4f5", "from": 15.0},
+	"kettle": {"hp": 110.0, "speed": 1.2, "r": 0.62, "scale": 1.7, "xp": 3, "col": "#ffd23f", "from": 70.0},
+	"eraser": {"hp": 55.0, "speed": 1.7, "r": 0.5, "scale": 1.35, "xp": 2, "col": "#7fd18b", "from": 85.0},
+	"dust": {"hp": 9.0, "speed": 3.5, "r": 0.3, "scale": 0.95, "xp": 1, "col": "#b8b2c0", "from": 115.0},
+	"boss": {"hp": 36000.0, "speed": 1.35, "r": 1.5, "scale": 3.0, "xp": 0, "col": "#6fbf4a", "from": 9999.0},
+}
+const BOSS_TIME := 240.0
+
 const MAINS := {
 	"gun": {"name": "물총", "icon": "물", "col": "#4fa8e8", "partner": "bottle", "evo": "소방차 물대포",
-		"evo_desc": "굵은 물대포가 모두 뚫고 지나가며 펑! 터져요",
-		"desc": ["가장 가까운 귀신에게 물을 쏴요", "피해 +30%", "물줄기 +1갈래", "쏘는 속도 +30%", "물줄기 +1, 귀신 1마리 관통"]},
+		"evo_desc": "굵은 물대포! 60% 확률로 관통, 40% 확률로 물풍선처럼 펑!",
+		"desc": ["가장 가까운 귀신에게 물을 쏴요", "피해 +30%", "물줄기 +1갈래", "쏘는 속도 +30%", "물줄기 +1, 30% 확률로 관통"]},
 	"ddakji": {"name": "딱지", "icon": "딱", "col": "#ff7aa8", "partner": "notebook", "evo": "황금 딱지 폭풍",
 		"evo_desc": "황금 딱지 8장이 크게 넘실대며 귀신을 날려요",
 		"desc": ["딱지 2장이 빙글빙글 철수를 지켜요", "딱지 +1장", "피해 +40%", "딱지 +1장", "딱지 +1장, 더 크고 빠르게"]},
 	"yoyo": {"name": "요요", "icon": "요", "col": "#2fc79a", "partner": "watch", "evo": "번개 요요",
-		"evo_desc": "요요 4개가 맞힐 때마다 찌릿! 번개가 옆으로 튀어요",
+		"evo_desc": "요요 4개! 맞히면 35% 확률로 찌릿, 번개가 옆으로 튀어요",
 		"desc": ["쭉 날아갔다 돌아오며 다 맞혀요", "요요 +1개", "피해 +40%", "더 멀리 날아가요", "요요 +1개"]},
 	"rubber": {"name": "고무줄", "icon": "줄", "col": "#ff9a2f", "partner": "sneakers", "evo": "무지개 고무줄",
 		"evo_desc": "무지개 고무줄이 두 겹으로 쫙쫙! 맞은 귀신은 느려져요",
@@ -40,7 +51,7 @@ const SUPPORTS := {
 	"notebook": {"name": "공책", "icon": "책", "col": "#b48ef0", "desc": "공격 범위·크기 +15%", "set": "ddakji"},
 	"watch": {"name": "계산기 시계", "icon": "시", "col": "#7cc95a", "desc": "공격 대기 시간 -8%", "set": "yoyo"},
 	"sneakers": {"name": "운동화", "icon": "신", "col": "#f2c230", "desc": "이동 속도 +10%", "set": "rubber"},
-	"pencil": {"name": "자석 필통", "icon": "필", "col": "#9b8cff", "desc": "딱지 줍는 거리 +40%", "set": ""},
+	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "딱지 줍는 거리 +40%", "set": ""},
 	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "최대 하트 +1, 1칸 회복", "set": ""},
 }
 var mains := {"gun": 1}          # 이름 -> 레벨
@@ -416,6 +427,57 @@ func _enemy_mesh(kind: String) -> ArrayMesh:
 		for sx in [-1.0, 1.0]:
 			L.append([_sph(0.08, -1, 8, 4), T(Vector3(sx * 0.33, 0.36, 0.08)), col.darkened(0.08)])
 			L.append([_sph(0.08, -1, 8, 4), T(Vector3(sx * 0.13, 0.08, 0.0)), col.darkened(0.12)])
+	elif kind == "kettle":
+		var col := Color("#ffd23f")
+		L.append([_sph(0.34, 0.5, 18, 8), T(Vector3(0, 0.36, 0)), col])
+		L.append([_cyl(0.2, 0.08, 0.26), T(Vector3(0, 0.63, 0)), col.darkened(0.08)])
+		L.append([_sph(0.05, -1, 8, 4), T(Vector3(0, 0.7, 0)), Color("#6b4a32")])
+		L.append([_cyl(0.045, 0.32, 0.07), T(Vector3(-0.38, 0.42, 0.0), Vector3(0, 0, 50)), col.darkened(0.05)])
+		L.append([_box(Vector3(0.5, 0.05, 0.05)), T(Vector3(0, 0.86, 0)), Color("#6b4a32")])
+		for sx in [-1.0, 1.0]:
+			L.append([_box(Vector3(0.05, 0.22, 0.05)), T(Vector3(sx * 0.23, 0.76, 0)), Color("#6b4a32")])
+			L.append([_sph(0.08, -1, 8, 4), T(Vector3(sx * 0.38, 0.3, 0.1)), col.darkened(0.1)])
+			L.append([_sph(0.08, -1, 8, 4), T(Vector3(sx * 0.14, 0.06, 0.0)), col.darkened(0.15)])
+		L.append([_sph(0.05, -1, 8, 4), T(Vector3(0.12, 0.5, 0.26)), Color("#c9a24a")])
+		_face_parts(L, 0.31, 0.38, 1.0)
+	elif kind == "eraser":
+		var col := Color("#7fd18b")
+		L.append([_box(Vector3(0.62, 0.3, 0.4)), T(Vector3(0, 0.42, 0)), col])
+		L.append([_box(Vector3(0.6, 0.12, 0.38)), T(Vector3(0, 0.22, 0)), Color("#d6d0dc")])
+		L.append([_box(Vector3(0.4, 0.06, 0.06)), T(Vector3(0, 0.62, 0)), col.darkened(0.2)])
+		_face_parts(L, 0.205, 0.43, 0.95)
+		for sx in [-1.0, 1.0]:
+			L.append([_sph(0.07, -1, 8, 4), T(Vector3(sx * 0.36, 0.38, 0.06)), col.darkened(0.1)])
+			L.append([_sph(0.07, -1, 8, 4), T(Vector3(sx * 0.16, 0.07, 0.0)), col.darkened(0.15)])
+	elif kind == "dust":
+		var col := Color("#b8b2c0")
+		L.append([_sph(0.26, -1, 10, 5), T(Vector3(0, 0.3, 0)), col])
+		for i in 7:
+			var a := TAU * i / 7.0
+			L.append([_sph(0.12, -1, 6, 3), T(Vector3(cos(a) * 0.22, 0.3 + sin(a * 2.0) * 0.1, sin(a) * 0.22)), col.darkened(0.12)])
+		_face_parts(L, 0.24, 0.32, 0.85)
+		L.append([_box(Vector3(0.03, 0.05, 0.02)), T(Vector3(-0.04, 0.2, 0.25)), Color.WHITE])
+		L.append([_box(Vector3(0.03, 0.05, 0.02)), T(Vector3(0.04, 0.2, 0.25)), Color.WHITE])
+	elif kind == "boss":
+		var g := Color("#6fbf4a")
+		L.append([_box(Vector3(0.9, 0.95, 0.6)), T(Vector3(0, 0.62, 0)), g])
+		L.append([_box(Vector3(0.82, 0.22, 0.05)), T(Vector3(0, 0.95, 0.3)), g.darkened(0.15)])
+		for i in 3:
+			L.append([_box(Vector3(0.3, 0.03, 0.02)), T(Vector3(0, 1.02 - i * 0.05, 0.33)), g.darkened(0.35)])
+		L.append([_box(Vector3(0.7, 0.32, 0.04)), T(Vector3(0, 0.62, 0.3)), Color("#2a1630")])
+		for sx in [-1.0, 1.0]:
+			L.append([_sph(0.08, -1, 10, 5), T(Vector3(sx * 0.15, 0.66, 0.33), Vector3.ZERO, Vector3(1, 0.8, 0.4)), Color("#ffe14a")])
+			L.append([_box(Vector3(0.14, 0.03, 0.02)), T(Vector3(sx * 0.15, 0.78, 0.33), Vector3(0, 0, -sx * 20.0)), Color("#2a1630")])
+			L.append([_sph(0.1, -1, 8, 4), T(Vector3(sx * 0.3, 0.55, 0.32), Vector3.ZERO, Vector3(1, 0.7, 0.3)), Color("#ff9db0")])
+			L.append([_cyl(0.14, 0.5, 0.17), T(Vector3(sx * 0.6, 0.55, 0.05), Vector3(0, 0, sx * 25.0)), Color("#2e3a8c")])
+			L.append([_sph(0.13, -1, 10, 5), T(Vector3(sx * 0.72, 0.3, 0.1)), Color("#f5d6b8")])
+			L.append([_box(Vector3(0.22, 0.12, 0.3)), T(Vector3(sx * 0.25, 0.06, 0.05)), Color.WHITE])
+		L.append([_box(Vector3(0.82, 0.18, 0.05)), T(Vector3(0, 0.33, 0.3)), g.darkened(0.15)])
+		L.append([_sph(0.25, 0.3, 14, 6), T(Vector3(0.1, 1.24, 0)), Color("#ffd23f")])
+		L.append([_cyl(0.04, 0.22, 0.06), T(Vector3(-0.17, 1.24, 0), Vector3(0, 0, 50)), Color("#ffd23f")])
+		var bc := [Color("#ff7aa8"), Color("#58c6f2"), Color("#ffd23f"), Color("#b48ef0")]
+		for i in 4:
+			L.append([_sph(0.11, -1, 8, 4), T(Vector3(-0.52 + (i % 2) * 1.04, 0.95 - (i / 2) * 0.35, 0.15)), bc[i]])
 	else:
 		var col := Color("#a9d4f5")
 		L.append([_sph(0.3, 0.74, 16, 8), T(Vector3(0, 0.46, 0)), col])
@@ -442,8 +504,21 @@ func _yoyo_mesh(c: Color) -> ArrayMesh:
 	return merge(L)
 
 func _make_multimeshes() -> void:
-	_mm("paper", _enemy_mesh("paper"), MAX_ENEMY, true)
-	_mm("egg", _enemy_mesh("egg"), MAX_ENEMY, true)
+	for kind in KINDS:
+		_mm(kind, _enemy_mesh(kind), 4 if kind == "boss" else MAX_ENEMY, true)
+	var H: Array = []
+	H.append([_sph(0.15, -1, 10, 5), T(Vector3(-0.1, 0.05, 0)), Color("#ff4f6d")])
+	H.append([_sph(0.15, -1, 10, 5), T(Vector3(0.1, 0.05, 0)), Color("#ff4f6d")])
+	H.append([_box(Vector3(0.22, 0.22, 0.2)), T(Vector3(0, -0.08, 0), Vector3(0, 0, 45)), Color("#ff4f6d")])
+	H.append([_sph(0.04, -1, 6, 3), T(Vector3(-0.12, 0.12, 0.11)), Color.WHITE])
+	heart_mesh = merge(H)
+	var G: Array = []
+	G.append([_box(Vector3(0.12, 0.34, 0.12)), T(Vector3(-0.14, 0.02, 0)), Color("#ff3b3b")])
+	G.append([_box(Vector3(0.12, 0.34, 0.12)), T(Vector3(0.14, 0.02, 0)), Color("#3b6bff")])
+	G.append([_box(Vector3(0.4, 0.12, 0.12)), T(Vector3(0, -0.15, 0)), Color("#ff3b3b")])
+	G.append([_box(Vector3(0.13, 0.08, 0.13)), T(Vector3(-0.14, 0.22, 0)), Color("#e8e8f0")])
+	G.append([_box(Vector3(0.13, 0.08, 0.13)), T(Vector3(0.14, 0.22, 0)), Color("#e8e8f0")])
+	magnet_mesh = merge(G)
 	_mm("gem", _ddakji_mesh(Color.WHITE, Color(1, 1, 1).darkened(0.25)), 300, true)
 	_mm("bullet", _sph(0.13, -1, 8, 4), 80, false)
 	_mm("drop", _sph(1.0, -1, 6, 3), 260, false)
@@ -548,9 +623,9 @@ func max_hp() -> int:
 func gun_stats() -> Dictionary:
 	var l := lv("gun")
 	if evolved.has("gun"):
-		return {"rate": 3.0, "dmg": 24.0, "shots": 3, "pierce": 999, "size": 2.0, "splash": 1.5}
-	return {"rate": 2.4 * (1.3 if l >= 4 else 1.0), "dmg": 10.0 * (1.3 if l >= 2 else 1.0),
-		"shots": 1 + (1 if l >= 3 else 0) + (1 if l >= 5 else 0), "pierce": 1 if l >= 5 else 0, "size": 1.0, "splash": 0.0}
+		return {"rate": 2.8, "dmg": 22.0, "shots": 3, "pierce": 0.6, "size": 1.8, "splash": 1.5, "splash_p": 0.4}
+	return {"rate": 2.2 * (1.3 if l >= 4 else 1.0), "dmg": 10.0 * (1.3 if l >= 2 else 1.0),
+		"shots": 1 + (1 if l >= 3 else 0) + (1 if l >= 5 else 0), "pierce": 0.3 if l >= 5 else 0.0, "size": 1.0, "splash": 0.0, "splash_p": 0.0}
 
 func ddakji_stats() -> Dictionary:
 	var l := lv("ddakji")
@@ -562,7 +637,7 @@ func ddakji_stats() -> Dictionary:
 func yoyo_stats() -> Dictionary:
 	var l := lv("yoyo")
 	if evolved.has("yoyo"):
-		return {"count": 4, "dmg": 26.0, "dist": 6.5, "cool": 1.3, "chain": 3}
+		return {"count": 4, "dmg": 24.0, "dist": 6.5, "cool": 1.4, "chain": 3}
 	return {"count": 1 + (1 if l >= 2 else 0) + (1 if l >= 5 else 0), "dmg": 14.0 * (1.4 if l >= 3 else 1.0),
 		"dist": 4.5 * (1.3 if l >= 4 else 1.0), "cool": 1.7, "chain": 0}
 
@@ -579,30 +654,95 @@ func evo_ready(id: String) -> bool:
 # =========================================================
 # 귀신
 # =========================================================
-func _make_enemy(kind: String, pos: Vector3) -> void:
+func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
+	var k: Dictionary = KINDS[kind]
 	var t := elapsed / RUN_TIME
-	var hpv := (22.0 if kind == "paper" else 12.0) * (1.0 + t * 2.2)
-	enemies.append({"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
-		"squash": 0.0, "phase": rng.randf() * TAU, "spawn": 0.0, "dead": -1.0, "slow": 0.0,
-		"speed": (1.55 if kind == "paper" else 2.7) * (1.0 + t * 0.25), "radius": 0.45 if kind == "paper" else 0.4, "hits": {}})
+	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0)
+	if kind == "boss":
+		hpv = k["hp"]
+	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
+		"squash": 0.0, "phase": rng.randf() * TAU, "spawn": 0.0, "dead": -1.0, "slow": 0.0, "elite": elite,
+		"speed": k["speed"] * (1.0 + t * 0.3), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
+		"dash": rng.randf_range(1.5, 3.5), "dash_t": 0.0, "summon": 3.0}
+	if elite:
+		e["hp"] *= 9.0
+		e["scale"] *= 1.55
+		e["radius"] *= 1.5
+		e["speed"] *= 0.9
+		e["xp"] *= 6
+	e["max_hp"] = e["hp"]
+	enemies.append(e)
+	return e
 
 func _spawn_logic(dt: float) -> void:
 	spawn_timer -= dt
 	if spawn_timer > 0.0:
 		return
 	var t := elapsed / RUN_TIME
-	spawn_timer = lerpf(1.3, 0.35, clampf(t * 1.3, 0, 1))
-	var count := 1 + int(t * 7.0)
+	spawn_timer = lerpf(1.1, 0.3, clampf(t * 1.3, 0, 1))
+	var count := 1 + int(t * 9.0)
+	if boss_spawned:
+		count = maxi(1, count / 3)
+	# 시간이 지날수록 센 귀신이 섞여요
+	var pool := {}
+	for kind in KINDS:
+		if kind != "boss" and elapsed >= KINDS[kind]["from"]:
+			pool[kind] = {"paper": 5.0, "egg": 3.0, "kettle": 1.2, "eraser": 1.6, "dust": 1.0}[kind]
 	for i in count:
-		if enemies.size() >= MAX_ENEMY - 4:
+		if enemies.size() >= MAX_ENEMY - 8:
 			return
-		var a := rng.randf() * TAU
-		var p := player.position + Vector3(cos(a), 0, sin(a)) * rng.randf_range(11.0, 13.0)
-		p.x = clampf(p.x, -ARENA, ARENA)
+		var p := _spawn_point()
+		var kind := _weighted(pool)
+		if kind == "dust":
+			for j in 5:
+				_make_enemy("dust", p + Vector3(rng.randf_range(-0.8, 0.8), 0, rng.randf_range(-0.8, 0.8)))
+		else:
+			_make_enemy(kind, p)
+
+func _spawn_point() -> Vector3:
+	var a := rng.randf() * TAU
+	var p := player.position + Vector3(cos(a), 0, sin(a)) * rng.randf_range(11.0, 13.0)
+	p.x = clampf(p.x, -ARENA, ARENA)
+	p.z = clampf(p.z, -ARENA, ARENA)
+	if p.distance_to(player.position) < 6.0:
+		p = player.position - (p - player.position).normalized() * 9.0
+	return p
+
+func _weighted(pool: Dictionary) -> String:
+	var tot := 0.0
+	for k in pool:
+		tot += pool[k]
+	var r := rng.randf() * tot
+	for k in pool:
+		r -= pool[k]
+		if r <= 0.0:
+			return k
+	return pool.keys()[0]
+
+# 정예 귀신과 보스
+var next_elite := 40.0
+var boss_spawned := false
+var boss: Dictionary = {}
+var boss_warned := false
+func _event_logic() -> void:
+	if elapsed >= next_elite and not boss_spawned:
+		next_elite += 40.0
+		var kinds: Array = []
+		for kind in KINDS:
+			if kind != "boss" and kind != "dust" and elapsed >= KINDS[kind]["from"]:
+				kinds.append(kind)
+		_make_enemy(kinds[rng.randi() % kinds.size()], _spawn_point(), true)
+		_banner("반짝반짝 정예 귀신 등장!", Color("#ffdf3d"))
+	if elapsed >= BOSS_TIME - 5.0 and not boss_warned:
+		boss_warned = true
+		_banner("분실물함 대왕귀신이 와요!", Color("#ff7aa8"))
+		_play("warn", 1.0, 0.0)
+	if elapsed >= BOSS_TIME and not boss_spawned:
+		boss_spawned = true
+		var p := player.position + Vector3(0, 0, -8)
 		p.z = clampf(p.z, -ARENA, ARENA)
-		if p.distance_to(player.position) < 6.0:
-			p = player.position - (p - player.position).normalized() * 9.0
-		_make_enemy("egg" if rng.randf() < clampf(0.15 + t * 0.6, 0, 0.5) else "paper", p)
+		boss = _make_enemy("boss", p)
+		shake = 0.5
 
 func _update_enemies(dt: float) -> void:
 	var alive: Array = []
@@ -620,17 +760,44 @@ func _update_enemies(dt: float) -> void:
 		var sp: float = e["speed"] * (0.45 if e["slow"] > 0.0 else 1.0)
 		e["slow"] -= dt
 		var want := to_p / maxf(dist, 0.01) * sp
-		e["vel"] = (e["vel"] as Vector3).lerp(want, dt * 4.0)
+		var steer := 4.0
+		if e["kind"] == "eraser":
+			# 부르르 떨다가 쌩 돌진해요
+			e["dash"] -= dt
+			if e["dash"] <= 0.0 and e["dash_t"] <= 0.0 and dist < 8.0:
+				e["dash_t"] = 0.95
+				e["dash_dir"] = to_p / maxf(dist, 0.01)
+			if e["dash_t"] > 0.0:
+				e["dash_t"] -= dt
+				if e["dash_t"] > 0.45:
+					want = Vector3.ZERO
+					e["squash"] = 0.3 + 0.2 * sin(elapsed * 60.0)
+				else:
+					want = e["dash_dir"] * 10.0
+					steer = 12.0
+					if rng.randf() < 0.5:
+						_part("drop", e["pos"] + Vector3(0, 0.3, 0), Vector3(0, 1, 0), Color(1, 1, 1, 0.8), 0.09, 0.4)
+				if e["dash_t"] <= 0.0:
+					e["dash"] = rng.randf_range(2.5, 4.0)
+		if e["kind"] == "boss":
+			e["summon"] -= dt
+			if e["summon"] <= 0.0:
+				e["summon"] = 3.5
+				for j in 6:
+					var a := TAU * j / 6.0
+					_make_enemy("dust", e["pos"] + Vector3(cos(a), 0, sin(a)) * 2.0)
+				_play("warn", 1.6, -8.0)
+		e["vel"] = (e["vel"] as Vector3).lerp(want, dt * steer)
 		e["pos"] += e["vel"] * dt
 		e["pos"].x = clampf(e["pos"].x, -ARENA - 1, ARENA + 1)
 		e["pos"].z = clampf(e["pos"].z, -ARENA - 1, ARENA + 1)
 		if dist > 0.01:
 			e["rot"] = lerp_angle(e["rot"], atan2(to_p.x, to_p.z), dt * 8.0)
-		e["phase"] += dt * (7.0 if e["kind"] == "paper" else 10.0)
+		e["phase"] += dt * (10.0 if e["kind"] in ["egg", "dust"] else 7.0)
 		e["squash"] = move_toward(e["squash"], 0.0, dt * 5.0)
 		e["flash"] = maxf(0.0, e["flash"] - dt)
 		if dist < e["radius"] + 0.3 and hurt_timer <= 0.0 and not game_over:
-			_player_hurt(e["pos"])
+			_player_hurt(e["pos"], 2 if e["kind"] == "boss" or e["elite"] else 1)
 	enemies = alive
 	# 서로 밀어내기
 	var n := enemies.size()
@@ -641,10 +808,16 @@ func _update_enemies(dt: float) -> void:
 			var d: Vector3 = a["pos"] - b["pos"]
 			d.y = 0
 			var l := d.length()
-			if l < 0.75 and l > 0.001:
-				var push := d / l * (0.75 - l) * 0.5
-				a["pos"] += push
-				b["pos"] -= push
+			var md: float = (a["radius"] + b["radius"]) * 0.85
+			if l < md and l > 0.001:
+				var push := d / l * (md - l) * 0.5
+				if a["kind"] == "boss":
+					b["pos"] -= push * 2.0
+				elif b["kind"] == "boss":
+					a["pos"] += push * 2.0
+				else:
+					a["pos"] += push
+					b["pos"] -= push
 
 func _hit_enemy(e: Dictionary, dmg: float, dir: Vector3, knock := 5.0, quiet := false) -> void:
 	if e["dead"] >= 0.0:
@@ -658,7 +831,8 @@ func _hit_enemy(e: Dictionary, dmg: float, dir: Vector3, knock := 5.0, quiet := 
 	e["squash"] = 1.0
 	dir.y = 0
 	if dir.length() > 0.01:
-		e["vel"] = dir.normalized() * knock
+		var resist := 0.08 if e["kind"] == "boss" else (0.35 if e["elite"] or e["kind"] == "kettle" else 1.0)
+		e["vel"] = dir.normalized() * knock * resist
 	var pos: Vector3 = e["pos"]
 	_number(pos + Vector3(0, 1.3, 0), int(round(dmg)), crit)
 	_burst(pos + Vector3(0, 0.55, 0), Color(0.7, 0.9, 1.0, 0.9), 3, 3.0)
@@ -675,16 +849,68 @@ func _kill_enemy(e: Dictionary) -> void:
 	combo += 1
 	combo_timer = 1.6
 	var pos: Vector3 = e["pos"]
-	var col := Color("#c9a8f0") if e["kind"] == "paper" else Color("#a9d4f5")
-	_burst(pos + Vector3(0, 0.6, 0), col, 7, 4.5)
-	_burst(pos + Vector3(0, 0.6, 0), Color("#fff27a"), 4, 5.0, true)
-	gems.append({"pos": pos + Vector3(0, 0.25, 0), "vel": Vector3(rng.randf_range(-1.5, 1.5), 3.5, rng.randf_range(-1.5, 1.5)),
-		"pull": false, "t": 0.0, "col": [Color("#ff7aa8"), Color("#ffd23f"), Color("#6ee0b0"), Color("#9b8cff")][rng.randi() % 4]})
+	var col := Color(KINDS[e["kind"]]["col"])
+	var big: bool = e["elite"] or e["kind"] == "boss"
+	_burst(pos + Vector3(0, 0.6, 0), col, 16 if big else 7, 6.0 if big else 4.5)
+	_burst(pos + Vector3(0, 0.6, 0), Color("#fff27a"), 14 if big else 4, 6.0 if big else 5.0, true)
+	for i in int(e["xp"]):
+		gems.append({"pos": pos + Vector3(0, 0.25, 0), "vel": Vector3(rng.randf_range(-1.5, 1.5), 3.5, rng.randf_range(-1.5, 1.5)) * (1.6 if i > 0 else 1.0),
+			"pull": false, "t": 0.0, "col": [Color("#ff7aa8"), Color("#ffd23f"), Color("#6ee0b0"), Color("#9b8cff")][rng.randi() % 4]})
+	# 하트·자석 떨어뜨리기
+	if e["elite"]:
+		_drop("heart", pos + Vector3(0.5, 0, 0))
+		_drop("magnet", pos + Vector3(-0.5, 0, 0))
+	elif e["kind"] != "boss":
+		var r := rng.randf()
+		if r < 0.012:
+			_drop("heart", pos)
+		elif r < 0.019:
+			_drop("magnet", pos)
+	if e["kind"] == "boss":
+		hitstop(0.25)
+		shake = 0.8
+		get_tree().create_timer(1.2).timeout.connect(func(): _end_game(true))
 	_play("pop", 1.0 + minf(combo, 12) * 0.04, -3.0)
 	if hitstop_cool <= 0.0:
 		hitstop(0.035)
 		hitstop_cool = 0.15
 	shake = maxf(shake, 0.12)
+
+# ---------- 떨어지는 아이템 ----------
+var drops: Array = []
+var heart_mesh: ArrayMesh
+var magnet_mesh: ArrayMesh
+func _drop(kind: String, pos: Vector3) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = heart_mesh if kind == "heart" else magnet_mesh
+	mi.material_override = mat_vc
+	add_child(mi)
+	drops.append({"node": mi, "kind": kind, "pos": pos + Vector3(0, 0.5, 0), "t": 0.0})
+
+func _update_drops(dt: float) -> void:
+	for d in drops.duplicate():
+		d["t"] += dt
+		var mi: MeshInstance3D = d["node"]
+		mi.position = d["pos"] + Vector3(0, 0.15 * sin(d["t"] * 4.0) + 0.2, 0)
+		mi.rotation.y = d["t"] * 2.5
+		mi.scale = Vector3.ONE * (1.0 + 0.08 * sin(d["t"] * 8.0)) * minf(1.0, d["t"] * 4.0)
+		var dist := Vector2(player.position.x - d["pos"].x, player.position.z - d["pos"].z).length()
+		if dist < 0.9:
+			if d["kind"] == "heart":
+				hp = mini(max_hp(), hp + 1)
+				_play("heal", 1.0, -3.0)
+				_burst(player.position + Vector3(0, 1, 0), Color("#ff5c7a"), 10, 3.0, true)
+				_refresh_ui()
+			else:
+				for g in gems:
+					g["pull"] = true
+				_play("magnet", 1.0, -3.0)
+				_banner("자석! 딱지가 다 모여요", Color("#ff7a7a"))
+			mi.queue_free()
+			drops.erase(d)
+		elif d["t"] > 25.0:
+			mi.queue_free()
+			drops.erase(d)
 
 func _nearest_enemy(range_v: float) -> Dictionary:
 	var best := {}
@@ -718,7 +944,7 @@ func _weapons(dt: float) -> void:
 				var start := gun.global_position + dir * 0.35
 				start.y = 0.6
 				bullets.append({"pos": start, "dir": dir, "life": 0.85, "pierce": gs["pierce"], "hit": [], "trail": 0.0,
-					"dmg": gs["dmg"], "size": gs["size"] * area_mult(), "splash": gs["splash"]})
+					"dmg": gs["dmg"], "size": gs["size"] * area_mult(), "splash": gs["splash"], "splash_p": gs["splash_p"]})
 			recoil = 1.0
 			_play("shoot" if not evolved.has("gun") else "blast", rng.randf_range(0.95, 1.1), -9.0)
 	_update_bullets(dt)
@@ -788,7 +1014,7 @@ func _weapons(dt: float) -> void:
 					if y["t"] - last > 0.5:
 						y["hit"][e] = y["t"]
 						_hit_enemy(e, y["dmg"], y["dir"], 4.0)
-						if y["chain"] > 0:
+						if y["chain"] > 0 and rng.randf() < 0.35:
 							_chain(e, int(y["chain"]), y["dmg"] * 0.6)
 			if y["t"] >= 1.0:
 				mi.queue_free()
@@ -905,18 +1131,19 @@ func _update_bullets(dt: float) -> void:
 			if Vector2(e["pos"].x - b["pos"].x, e["pos"].z - b["pos"].z).length() < e["radius"] + 0.12 * b["size"]:
 				b["hit"].append(e)
 				_hit_enemy(e, b["dmg"], b["dir"], 5.5)
-				if b["splash"] > 0.0:
-					_splash(e["pos"], b["splash"] * area_mult(), e, b["dmg"] * 0.5)
-				if b["pierce"] <= 0:
+				if b["splash"] > 0.0 and rng.randf() < b["splash_p"]:
+					_splash(e["pos"], b["splash"] * area_mult(), e, b["dmg"] * 0.6)
+				if rng.randf() >= b["pierce"]:
 					done = true
 					break
-				b["pierce"] -= 1
 		if done:
 			_burst(b["pos"], Color(0.65, 0.88, 1.0, 0.85), 4, 2.5)
 			bullets.erase(b)
 
 func _splash(pos: Vector3, r: float, skip: Dictionary, dmg: float) -> void:
-	_burst(pos + Vector3(0, 0.3, 0), Color(0.6, 0.85, 1, 0.8), 8, 4.0)
+	_burst(pos + Vector3(0, 0.3, 0), Color(0.6, 0.85, 1, 0.8), 12, 5.0)
+	_play("splash", rng.randf_range(0.9, 1.1), -6.0)
+	shake = maxf(shake, 0.1)
 	for e in enemies:
 		if e == skip or e["dead"] >= 0.0:
 			continue
@@ -938,7 +1165,7 @@ func _update_gems(dt: float) -> void:
 		if not g["pull"] and g["t"] > 0.35 and d.length() < magnet():
 			g["pull"] = true
 		if g["pull"]:
-			g["vel"] = (g["vel"] as Vector3).lerp(d.normalized() * 14.0, dt * 9.0)
+			g["vel"] = (g["vel"] as Vector3).lerp(d.normalized() * maxf(14.0, d.length() * 3.0), dt * 9.0)
 		else:
 			g["vel"].y -= 12.0 * dt
 		g["pos"] += g["vel"] * dt
@@ -964,7 +1191,7 @@ func _gain_xp(v: int) -> void:
 	if xp >= xp_need and not paused:
 		xp -= xp_need
 		level += 1
-		xp_need = 3 + level * 2 + int(level * level * 0.12)
+		xp_need = 3 + level * 2 + int(level * level * 0.25)
 		_level_up()
 	_refresh_ui()
 
@@ -1039,7 +1266,9 @@ func _update_fx(dt: float) -> void:
 
 func _sync_draw() -> void:
 	# 귀신
-	var counts := {"paper": 0, "egg": 0}
+	var counts := {}
+	for kind in KINDS:
+		counts[kind] = 0
 	var sh: MultiMesh = mm["shadow"].multimesh
 	var shn := 0
 	sh.set_instance_transform(shn, Transform3D(Basis(), player.position + Vector3(0, 0.02, 0)))
@@ -1054,20 +1283,27 @@ func _sync_draw() -> void:
 		var sq: float = e["squash"]
 		var spn: float = e["spawn"]
 		var pop := spn * (1.0 + sin(spn * PI) * 0.35)
-		var scl := Vector3(1.0 + sq * 0.45 + (1.0 - hop) * 0.05, 1.0 - sq * 0.4 - (1.0 - hop) * 0.06, 1.0 + sq * 0.45) * pop * 1.25
+		var es: float = e["scale"]
+		var scl := Vector3(1.0 + sq * 0.45 + (1.0 - hop) * 0.05, 1.0 - sq * 0.4 - (1.0 - hop) * 0.06, 1.0 + sq * 0.45) * pop * es
 		var fl: float = minf(1.0, e["flash"] / 0.05)
 		if e["dead"] >= 0.0:
 			var k: float = e["dead"] / 0.16
-			scl = Vector3(1.0 + k * 0.7, 1.0 - k * 0.85, 1.0 + k * 0.7) * 1.25
+			scl = Vector3(1.0 + k * 0.7, 1.0 - k * 0.85, 1.0 + k * 0.7) * es
 			fl = 1.0
+		var tint := Color(1, 1, 1)
+		if e["elite"]:
+			tint = Color(1.25, 1.05, 0.55).lerp(Color(1.4, 1.3, 0.9), 0.5 + 0.5 * sin(elapsed * 6.0))
+		if e["kind"] == "eraser" and e["dash_t"] > 0.45:
+			tint = Color(1.4, 0.8, 0.8)
 		var tr := Transform3D(Basis(Vector3.UP, e["rot"]).scaled(scl), e["pos"] + Vector3(0, hop * 0.12, 0))
 		m.set_instance_transform(i, tr)
 		m.set_instance_color(i, Color.WHITE)
-		m.set_instance_custom_data(i, Color(1, 1, 1, fl))
-		sh.set_instance_transform(shn, Transform3D(Basis().scaled(Vector3(0.95, 1, 0.95)), e["pos"] + Vector3(0, 0.015, 0)))
+		m.set_instance_custom_data(i, Color(tint.r, tint.g, tint.b, fl))
+		var ss := es * 0.76
+		sh.set_instance_transform(shn, Transform3D(Basis().scaled(Vector3(ss, 1, ss)), e["pos"] + Vector3(0, 0.015, 0)))
 		shn += 1
-	mm["paper"].multimesh.visible_instance_count = counts["paper"]
-	mm["egg"].multimesh.visible_instance_count = counts["egg"]
+	for kind in KINDS:
+		mm[kind].multimesh.visible_instance_count = counts[kind]
 	sh.visible_instance_count = shn
 	# 딱지
 	var gm: MultiMesh = mm["gem"].multimesh
@@ -1109,8 +1345,11 @@ func _sync_draw() -> void:
 	dm.visible_instance_count = dn
 	stm.visible_instance_count = sn
 
-func _player_hurt(from: Vector3) -> void:
-	hp -= 1
+var god := false
+func _player_hurt(from: Vector3, amount := 1) -> void:
+	if god:
+		return
+	hp -= amount
 	hurt_timer = 1.1
 	shake = 0.35
 	hitstop(0.08)
@@ -1138,6 +1377,13 @@ func _process(delta: float) -> void:
 		shot_frames += 1
 		if shot_mode == "hero":
 			cam.look_at(player.position + Vector3(0, 0.6, 0.6), Vector3.UP)
+		if shot_mode == "bossview":
+			player.position = Vector3(0, 0, 4)
+			cam.position = Vector3(0, 4.5, 7.5)
+			cam.look_at(Vector3(0, 0.8, -1.0), Vector3.UP)
+			cam_off = cam.position - player.position
+			for e in enemies:
+				e["hp"] = 99999.0
 		if shot_frames == 110 and perf_frames == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_%s.png" % shot_mode)
 			get_tree().quit()
@@ -1158,8 +1404,8 @@ func _process(delta: float) -> void:
 		_update_hud()
 		return
 	elapsed += dt
-	if elapsed >= RUN_TIME:
-		_end_game(true)
+	if boss_spawned and not boss.is_empty() and elapsed > BOSS_TIME + 60.0:
+		boss["speed"] = KINDS["boss"]["speed"] * 2.0   # 1분 안에 못 잡으면 화나요
 	_read_input()
 	if auto_play:
 		_auto_input(dt)
@@ -1173,7 +1419,9 @@ func _process(delta: float) -> void:
 	model.visible = hurt_timer <= 0.0 or fmod(hurt_timer, 0.16) > 0.08
 	var t0 := Time.get_ticks_usec()
 	_spawn_logic(dt)
+	_event_logic()
 	_update_enemies(dt)
+	_update_drops(dt)
 	var t1 := Time.get_ticks_usec()
 	_weapons(dt)
 	var t2 := Time.get_ticks_usec()
@@ -1194,7 +1442,7 @@ func _process(delta: float) -> void:
 	_update_camera(dt)
 	_update_hud()
 	if auto_play and int(elapsed / 10.0) != int((elapsed - dt) / 10.0):
-		print("T%d kills=%d lv=%d hp=%d enemies=%d gems=%d parts=%d mains=%s sup=%s evo=%s" % [int(elapsed), kills, level, hp, enemies.size(), gems.size(), parts.size(), mains, supports, evolved.keys()])
+		print(("BOSS%d " % int(boss["hp"]) if not boss.is_empty() else "") + "T%d kills=%d lv=%d hp=%d enemies=%d gems=%d parts=%d mains=%s sup=%s evo=%s" % [int(elapsed), kills, level, hp, enemies.size(), gems.size(), parts.size(), mains, supports, evolved.keys()])
 
 func _update_camera(dt: float) -> void:
 	cam.position = cam.position.lerp(player.position + cam_off, minf(1.0, dt * 6.0))
@@ -1232,6 +1480,22 @@ func _auto_input(dt: float) -> void:
 	if push.length() > 0.5:
 		var v := (push.normalized() + Vector3(-player.position.x, 0, -player.position.z) * 0.04).normalized()
 		auto_dir = Vector2(v.x, v.z)
+	else:
+		# 안전하면 딱지·아이템 주우러 가요
+		var best := Vector3.ZERO
+		var bd := 7.0
+		for g in gems:
+			var d: float = (g["pos"] as Vector3).distance_to(player.position)
+			if d < bd:
+				bd = d
+				best = g["pos"]
+		for d in drops:
+			best = d["pos"]
+			bd = 0.0
+			break
+		if best != Vector3.ZERO:
+			var v := (best - player.position)
+			auto_dir = Vector2(v.x, v.z).normalized()
 	move_dir = Vector3(auto_dir.x, 0, auto_dir.y)
 
 func _input(event: InputEvent) -> void:
@@ -1387,9 +1651,57 @@ func _refresh_slots() -> void:
 		lvl.position = Vector2(31, 24)
 		x += 52
 
+var banner_label: Label
+var banner_t := 0.0
+var boss_bar_bg: Panel
+var boss_bar: ColorRect
+func _banner(text: String, col: Color) -> void:
+	if banner_label == null:
+		banner_label = _label("", 46, col, hud)
+		banner_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		banner_label.offset_left = -360
+		banner_label.offset_right = 360
+		banner_label.offset_top = -330
+		banner_label.offset_bottom = -260
+		banner_label.pivot_offset = Vector2(360, 35)
+	banner_label.text = text
+	banner_label.add_theme_color_override("font_color", col)
+	banner_t = 2.2
+
 func _update_hud() -> void:
-	var left := maxf(0.0, RUN_TIME - elapsed)
-	timer_label.text = "%d:%02d" % [int(left) / 60, int(left) % 60]
+	var left := maxf(0.0, BOSS_TIME - elapsed)
+	if boss_spawned:
+		timer_label.text = "보스전!"
+	else:
+		timer_label.text = "%d:%02d" % [int(left) / 60, int(left) % 60]
+	if banner_label:
+		banner_t -= get_process_delta_time()
+		banner_label.visible = banner_t > 0.0
+		banner_label.scale = Vector2.ONE * (1.0 + maxf(0.0, banner_t - 1.9) * 2.0)
+		banner_label.modulate.a = clampf(banner_t * 2.0, 0, 1)
+	if boss_spawned and not boss.is_empty():
+		if boss_bar_bg == null:
+			boss_bar_bg = Panel.new()
+			boss_bar_bg.add_theme_stylebox_override("panel", _round_panel(Color(0.2, 0.1, 0.25, 0.8), 14, Color("#3a2148"), 4))
+			boss_bar_bg.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+			boss_bar_bg.offset_left = -260
+			boss_bar_bg.offset_right = 260
+			boss_bar_bg.offset_top = 128
+			boss_bar_bg.offset_bottom = 162
+			boss_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			hud.add_child(boss_bar_bg)
+			boss_bar = ColorRect.new()
+			boss_bar.color = Color("#ff5c7a")
+			boss_bar.position = Vector2(6, 6)
+			boss_bar.size = Vector2(508, 22)
+			boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			boss_bar_bg.add_child(boss_bar)
+			var bl := _label("분실물함 대왕귀신", 26, Color.WHITE, boss_bar_bg, 7)
+			bl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		boss_bar.size.x = 508.0 * clampf(boss["hp"] / boss["max_hp"], 0, 1)
 	xp_bar.size.x = xp_bar_bg.size.x * float(xp) / float(xp_need)
 	kill_label.text = "귀신 %d" % kills
 	for c in slot_box.get_children():
@@ -1619,7 +1931,7 @@ func _end_game(win: bool) -> void:
 	box_p.offset_top = -270
 	box_p.offset_bottom = 270
 	end_panel.add_child(box_p)
-	var t := _label("운동장을 지켰다!" if win else "철수가 기절했어요", 52, Color("#ffdf3d") if win else Color("#ff7aa8"), box_p)
+	var t := _label("대왕귀신을 물리쳤다!" if win else "철수가 기절했어요", 52, Color("#ffdf3d") if win else Color("#ff7aa8"), box_p)
 	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.offset_top = 46
@@ -1721,6 +2033,20 @@ func _make_sounds() -> void:
 		return sin(st["ph"] * TAU) * (1.0 + 0.5 * sin(t * 90.0 * TAU)) * exp(-t * 11.0) * 0.45)
 	sounds["zap"] = _synth(0.15, func(t: float, st: Dictionary) -> float:
 		return r.randf_range(-1, 1) * (1.0 if sin(t * 3000.0) > 0 else 0.3) * exp(-t * 20.0) * 0.4)
+	sounds["splash"] = _synth(0.3, func(t: float, st: Dictionary) -> float:
+		st["lp"] = lerpf(st["lp"], r.randf_range(-1, 1), 0.25)
+		st["ph"] += (240.0 - t * 400.0) / 22050.0
+		return (st["lp"] * 0.9 + sin(st["ph"] * TAU) * 0.6 * exp(-t * 20.0)) * exp(-t * 10.0) * 0.6)
+	sounds["heal"] = _synth(0.4, func(t: float, st: Dictionary) -> float:
+		var f := 880.0 if t < 0.12 else 1320.0
+		return sin(t * f * TAU) * exp(-fmod(t, 0.12) * 12.0) * 0.45)
+	sounds["magnet"] = _synth(0.5, func(t: float, st: Dictionary) -> float:
+		st["ph"] += (300.0 + t * 1800.0) / 22050.0
+		return sin(st["ph"] * TAU) * (0.6 + 0.4 * sin(t * 40.0 * TAU)) * exp(-t * 4.0) * 0.4)
+	sounds["warn"] = _synth(0.9, func(t: float, st: Dictionary) -> float:
+		var on := 1.0 if fmod(t, 0.3) < 0.2 else 0.0
+		st["ph"] += (330.0 if fmod(t, 0.6) < 0.3 else 262.0) / 22050.0
+		return (1.0 if fmod(st["ph"], 1.0) < 0.5 else -1.0) * on * 0.22)
 	for i in 10:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
@@ -1741,6 +2067,19 @@ func _play(name: String, pitch := 1.0, db := 0.0) -> void:
 # =========================================================
 func _setup_shot() -> void:
 	rng.seed = 11
+	god = true
+	if shot_mode == "bossview":
+		cam_off = Vector3(0, 6.0, 9.0)
+		boss_spawned = true
+		boss = _make_enemy("boss", Vector3(0, 0, -3))
+		boss["speed"] = 0.0
+		boss["summon"] = 999.0
+		for k in ["kettle", "eraser", "dust", "paper", "egg"]:
+			var e := _make_enemy(k, Vector3(-3.0 + ["kettle", "eraser", "dust", "paper", "egg"].find(k) * 1.5, 0, 0.5))
+			e["speed"] = 0.0
+		spawn_timer = 999.0
+		next_elite = 9999.0
+		return
 	if shot_mode == "hero":
 		cam_off = Vector3(1.2, 1.6, 3.2)
 		cam.position = cam_off
@@ -1749,7 +2088,11 @@ func _setup_shot() -> void:
 	elapsed = 60.0
 	for i in (150 if shot_mode == "evo_perf" else 40):
 		var a := rng.randf() * TAU
-		_make_enemy("paper" if i % 3 else "egg", Vector3(cos(a), 0, sin(a)) * rng.randf_range(2.5, 8.0))
+		var kinds := ["paper", "paper", "egg", "kettle", "eraser", "dust"]
+		_make_enemy(kinds[i % kinds.size()] if shot_mode != "cards" else "paper", Vector3(cos(a), 0, sin(a)) * rng.randf_range(2.5, 8.0), i == 5)
+	if shot_mode == "boss":
+		boss_spawned = true
+		boss = _make_enemy("boss", Vector3(0, 0, -4))
 	for e in enemies:
 		e["spawn"] = 1.0
 	if shot_mode in ["evo", "evocard", "evo_perf"]:
