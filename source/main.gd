@@ -672,9 +672,9 @@ func _place_decor() -> void:
 	match stage:
 		"ground":
 			_decor("bg_school", "", Vector3(0, 0, -20.5), 0.0, 1.0)
-			_decor("set_ground", "p4", Vector3(0, 0, -15.6), 0.0, 2.6)
-			_decor("set_ground", "p5", Vector3(-11.5, 0, -15.0), 0.0, 1.8)
-			_decor("set_ground", "p5", Vector3(11.5, 0, -15.0), 0.0, 1.8)
+			_decor("set_ground", "p2", Vector3(0, 0, -15.6), 0.0, 2.6)
+			_decor("set_ground", "p3", Vector3(-11.5, 0, -15.0), 0.0, 1.8)
+			_decor("set_ground", "p3", Vector3(11.5, 0, -15.0), 0.0, 1.8)
 		"hall":
 			var left := ["p0", "p1", "p2", "p6"]
 			var right := ["p3", "p4", "p5"]
