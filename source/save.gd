@@ -12,8 +12,20 @@ const STAGES := {
 	"ground": {"name": "운동장", "desc": "넓은 흙 운동장. 사방에서 귀신이 몰려와요.", "boss": "분실물함 대왕귀신", "need": "", "col": "#e8b77a"},
 	"hall": {"name": "학교 복도", "desc": "길고 좁은 복도! 양쪽 끝에서 귀신이 밀려와요.", "boss": "청소함 대왕귀신", "need": "ground", "col": "#8fd1a8"},
 	"lab": {"name": "밤의 과학실", "desc": "불 꺼진 과학실. 손전등 불빛만 믿어야 해요.", "boss": "인체모형 대왕귀신", "need": "hall", "col": "#6f7fd8"},
+	"toilet": {"name": "화장실", "desc": "칸막이 사이 좁은 길! 휴지 귀신의 본거지예요.", "boss": "변기 대왕귀신", "need": "lab", "col": "#7fc8e8"},
+	"roof": {"name": "옥상", "desc": "바람이 세게 불어요. 난간 밖으로 밀려난 귀신은 떨어져요.", "boss": "물탱크 대왕귀신", "need": "toilet", "col": "#f2a65a"},
+	"music": {"name": "음악실", "desc": "쿵짝쿵짝! 박자마다 철수 주변에 충격파가 퍼져요.", "boss": "피아노 대왕귀신", "need": "roof", "col": "#c98ef0"},
 }
-const STAGE_ORDER := ["ground", "hall", "lab"]
+const STAGE_ORDER := ["ground", "hall", "lab", "toilet", "roof", "music"]
+
+# 특별한 날: 날짜마다 바뀌어요
+const DAY_MODS := {
+	"normal": {"name": "평범한 날", "desc": "오늘은 별일 없어요.", "col": "#b9b0bf"},
+	"rain": {"name": "비 오는 날", "desc": "물웅덩이에서 미끄러져요. 귀신도 느려져요. 동전 +20%", "col": "#58a6e8"},
+	"sports": {"name": "운동회 날", "desc": "모두 빨라져요! 계주 귀신이 달려와요. 동전 +20%", "col": "#ff9a2f"},
+	"exam": {"name": "시험 기간", "desc": "보스가 1분 일찍 와요. 대신 경험치 +30%", "col": "#e8524a"},
+	"vacation": {"name": "방학", "desc": "밤의 학교! 손전등으로 버텨요. 동전 +30%", "col": "#4a4fa8"},
+}
 const MAX_GRADE := 6
 
 const CHARS := {
@@ -56,6 +68,11 @@ const ACH := [
 	{"id": "clear_lab", "name": "과학실 수호자", "desc": "과학실 보스 물리치기", "stat": "clear_lab", "goal": 1, "reward": 500},
 	{"id": "grade3", "name": "3학년 진급", "desc": "아무 곳이나 3학년 클리어", "stat": "best_grade", "goal": 3, "reward": 300},
 	{"id": "grade6", "name": "졸업!", "desc": "아무 곳이나 6학년 클리어", "stat": "best_grade", "goal": 6, "reward": 1500},
+	{"id": "clear_toilet", "name": "화장실 수호자", "desc": "화장실 보스 물리치기", "stat": "clear_toilet", "goal": 1, "reward": 700},
+	{"id": "clear_roof", "name": "옥상 수호자", "desc": "옥상 보스 물리치기", "stat": "clear_roof", "goal": 1, "reward": 900},
+	{"id": "clear_music", "name": "음악실 수호자", "desc": "음악실 보스 물리치기", "stat": "clear_music", "goal": 1, "reward": 1200},
+	{"id": "weekly1", "name": "도전자", "desc": "주간 도전 참가하기", "stat": "weekly_runs", "goal": 1, "reward": 100},
+	{"id": "gacha5", "name": "뽑기 중독", "desc": "문방구 뽑기통 5번 돌리기", "stat": "gacha_total", "goal": 5, "reward": 150},
 	{"id": "friends4", "name": "퇴마단 결성", "desc": "친구 4명 모두 모으기", "stat": "friends", "goal": 4, "reward": 500},
 ]
 
@@ -78,6 +95,7 @@ const BESTIARY := {
 	"kettle": {"name": "주전자 귀신", "desc": "운동회 날 잃어버린 노란 주전자. 뜨겁고 단단해요."},
 	"eraser": {"name": "지우개 귀신", "desc": "칠판지우개. 부르르 떨다가 쌩 돌진하니 조심!"},
 	"dust": {"name": "먼지 뭉치", "desc": "마룻바닥 틈에서 떼로 몰려나와요."},
+	"relay": {"name": "계주 귀신", "desc": "운동회 날에만 나타나는 빨간 머리띠 귀신. 엄청 빨라요."},
 	"boss": {"name": "대왕귀신", "desc": "아무도 찾아가지 않은 물건들이 모여 생긴 왕 귀신."},
 }
 
@@ -131,7 +149,7 @@ func buy(id: String) -> bool:
 # ---------- 기록 값 ----------
 func stat(key: String) -> int:
 	match key:
-		"clear_ground", "clear_hall", "clear_lab":
+		"clear_ground", "clear_hall", "clear_lab", "clear_toilet", "clear_roof", "clear_music":
 			return 1 if int(data["clears"].get(key.substr(6), 0)) > 0 else 0
 		"best_grade":
 			var m := 0
@@ -183,6 +201,31 @@ func stage_unlocked(id: String) -> bool:
 
 func max_grade(id: String) -> int:
 	return mini(MAX_GRADE, int(data["clears"].get(id, 0)) + 1)
+
+# ---------- 특별한 날 ----------
+func today_mod() -> String:
+	var r := RandomNumberGenerator.new()
+	r.seed = hash(_today() + "mod")
+	var roll := r.randf()
+	if roll < 0.3:
+		return "normal"
+	return ["rain", "sports", "exam", "vacation"][int((roll - 0.3) / 0.7 * 4.0) % 4]
+
+# ---------- 주간 도전 ----------
+func week_id() -> int:
+	return int(Time.get_unix_time_from_system() / 86400.0 + 3.0) / 7    # 월요일마다 바뀌어요
+
+func weekly_cfg() -> Dictionary:
+	var w := week_id()
+	var r := RandomNumberGenerator.new()
+	r.seed = w * 7919
+	var mods := ["rain", "sports", "exam", "vacation"]
+	return {"stage": ["ground", "hall", "lab"][r.randi() % 3], "char": CHAR_ORDER[r.randi() % 4],
+		"mod": mods[r.randi() % 4], "grade": 2, "seed": w * 7919 + 13, "week": w}
+
+func weekly_best() -> int:
+	var wk: Dictionary = data.get("weekly", {})
+	return int(wk.get("best", 0)) if int(wk.get("week", -1)) == week_id() else 0
 
 # ---------- 오늘의 숙제 ----------
 func _today() -> String:
@@ -260,19 +303,32 @@ func record_run(r: Dictionary) -> Dictionary:
 	st["elite_kills"] = int(st.get("elite_kills", 0)) + int(r["elites"])
 	st["best_combo"] = maxi(int(st.get("best_combo", 0)), int(r["combo"]))
 	st["best_nohit"] = maxi(int(st.get("best_nohit", 0)), int(r["nohit"]))
+	st["gacha_total"] = int(st.get("gacha_total", 0)) + int(r.get("gacha", 0))
+	var weekly_new := false
+	if r.get("weekly", false):
+		st["weekly_runs"] = int(st.get("weekly_runs", 0)) + 1
+		var wk: Dictionary = data.get("weekly", {})
+		if int(wk.get("week", -1)) != week_id():
+			wk = {"week": week_id(), "best": 0}
+		if int(r["score"]) > int(wk["best"]):
+			wk["best"] = int(r["score"])
+			weekly_new = true
+		data["weekly"] = wk
 	data["coins"] += int(r["coins"])
 	data["runs"] = int(data["runs"]) + 1
 	for k in r["kinds"]:
 		data["bestiary"][k] = int(data["bestiary"].get(k, 0)) + int(r["kinds"][k])
 	var new_grade := false
-	if r["win"]:
+	if r["win"] and not r.get("weekly", false):
 		var prev := int(data["clears"].get(r["stage"], 0))
 		if int(r["grade"]) > prev:
 			data["clears"][r["stage"]] = int(r["grade"])
 			new_grade = true
 	var bk: String = "%s_%d" % [r["stage"], r["grade"]]
 	var best: Dictionary = data["best"].get(bk, {})
-	if r["win"] and (best.is_empty() or not best.get("win", false) or float(r["time"]) < float(best.get("time", 9999))):
+	if r.get("weekly", false):
+		pass
+	elif r["win"] and (best.is_empty() or not best.get("win", false) or float(r["time"]) < float(best.get("time", 9999))):
 		data["best"][bk] = {"win": true, "time": r["time"], "kills": r["kills"]}
 	elif best.is_empty() or (not best.get("win", false) and float(r["time"]) > float(best.get("time", 0))):
 		data["best"][bk] = {"win": r["win"], "time": r["time"], "kills": r["kills"]}
@@ -293,4 +349,6 @@ func record_run(r: Dictionary) -> Dictionary:
 			news.append("새 장소: " + STAGES[s]["name"] + "!")
 	if new_grade and int(r["grade"]) < MAX_GRADE:
 		news.append("%s %d학년이 열렸어요!" % [STAGES[r["stage"]]["name"], int(r["grade"]) + 1])
+	if weekly_new:
+		news.append("주간 도전 최고 기록!")
 	return {"news": news}

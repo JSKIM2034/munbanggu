@@ -195,6 +195,34 @@ func _home() -> void:
 # ---------- 놀러 가기 ----------
 func _stage() -> void:
 	var vb := _page("어디로 갈까?")
+	# 오늘의 특별한 날
+	var mid := Save.today_mod()
+	var md: Dictionary = Save.DAY_MODS[mid]
+	var mrow := _row(vb, 130, Color(md["col"]))
+	var ml := L("오늘은 " + md["name"], 40, INK, mrow)
+	ml.position = Vector2(28, 14)
+	var mdl := L(md["desc"], 26, SUB, mrow)
+	mdl.position = Vector2(28, 74)
+	# 주간 도전
+	var wc := Save.weekly_cfg()
+	var wrow := _row(vb, 250, Color("#ffc928"), Color("#fff1b8"))
+	var wl := L("이번 주 도전", 44, INK, wrow)
+	wl.position = Vector2(28, 16)
+	var wd := L("%s 2학년, %s 빌려서, %s\n모두 같은 조건! 점수를 단톡방에 자랑해요" % [Save.STAGES[wc["stage"]]["name"], Save.CHARS[wc["char"]]["name"], Save.DAY_MODS[wc["mod"]]["name"]], 26, SUB, wrow)
+	wd.position = Vector2(28, 76)
+	var wb := L("이번 주 최고 점수 %d" % Save.weekly_best(), 28, Color("#d08a00"), wrow)
+	wb.position = Vector2(28, 160)
+	var wgo := B("도전!", Color("#e8524a"), 40)
+	wgo.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	wgo.offset_left = -210
+	wgo.offset_right = -24
+	wgo.offset_top = -100
+	wgo.offset_bottom = -20
+	wrow.add_child(wgo)
+	wgo.pressed.connect(func():
+		Save.run_cfg = {"stage": wc["stage"], "grade": wc["grade"], "weekly": true}
+		Save.mode = "run"
+		get_tree().reload_current_scene())
 	for sid in Save.STAGE_ORDER:
 		var s: Dictionary = Save.STAGES[sid]
 		var open := Save.stage_unlocked(sid)
