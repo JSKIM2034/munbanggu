@@ -2191,7 +2191,7 @@ func _use_gacha(d: Dictionary) -> void:
 	var cost: int = d["cost"]
 	if run_coins < cost:
 		_banner("동전이 모자라요 (%d개 필요)" % cost, Color("#ff9a2f"))
-		_play("hurt", 1.6, -10.0)
+		_play("ui_error", 1.0, -4.0)
 		return
 	run_coins -= cost
 	gacha_used += 1
@@ -3538,6 +3538,7 @@ func _open_settings() -> void:
 			var st := _round_panel(Color("#2fc79a") if v else Color("#b9b0bf"), 26, Color("#3a2148"), 5)
 			b.add_theme_stylebox_override("normal", st)
 			b.add_theme_stylebox_override("hover", st)
+			_play("ui_toggle", 1.0, -4.0)
 			if key == "bgm" and bgm:
 				bgm.volume_db = -9.0 if v else -80.0
 			_play("pick", 1.0, -3.0))
@@ -3695,6 +3696,8 @@ func _level_up() -> void:
 	var pick := _card_pool()
 	var is_evo: bool = pick[0]["type"] == "evo"
 	_play("evo" if is_evo else "level", 1.0, -2.0)
+	if not is_evo:
+		_play("ui_level", 1.0, -4.0)
 	if auto_play:
 		_apply_card(pick[0] if is_evo else pick[rng.randi() % pick.size()])
 		return
@@ -4370,6 +4373,13 @@ func _make_sounds() -> void:
 		var on := 1.0 if fmod(t, 0.3) < 0.2 else 0.0
 		st["ph"] += (330.0 if fmod(t, 0.6) < 0.3 else 262.0) / 22050.0
 		return (1.0 if fmod(st["ph"], 1.0) < 0.5 else -1.0) * on * 0.22)
+	# 화면 소리는 Kenney 인터페이스 효과음(CC0)으로
+	for nm in ["ui_pick", "ui_level", "ui_error", "ui_toggle", "ui_drop", "ui_open"]:
+		var path := "res://sfx/%s.ogg" % nm
+		if ResourceLoader.exists(path):
+			sounds[nm] = load(path)
+	if sounds.has("ui_pick"):
+		sounds["pick"] = sounds["ui_pick"]
 	for i in 10:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
