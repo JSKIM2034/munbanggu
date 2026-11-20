@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://e6187a7fn3ax"
+path="res://.godot/imported/boss_roof_Image_0.jpg-47a89cc67e60336284dd5b9a3a9e88c4.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "3d56c559b12fbe8c149a9d524560c087"
+}
+
+[deps]
+
+source_file="res://models/boss_roof_Image_0.jpg"
+dest_files=["res://.godot/imported/boss_roof_Image_0.jpg-47a89cc67e60336284dd5b9a3a9e88c4.ctex"]
+
+[params]
+
+compress/mode=1
+compress/high_quality=false
+compress/lossy_quality=0.82
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=0

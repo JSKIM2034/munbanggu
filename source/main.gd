@@ -512,7 +512,8 @@ void fragment(){ ALBEDO = cu.rgb; ALPHA = cu.a; }
 """
 
 const GHOST_MODELS := {"paper": "ghost_paper", "egg": "ghost_egg", "kettle": "ghost_kettle", "eraser": "ghost_eraser",
-	"dust": "ghost_dust", "report": "ghost_report", "boss": "boss_locker"}
+	"dust": "ghost_dust", "report": "ghost_report", "boss": "boss_locker", "relay": "ghost_relay", "pot": "prop_pot", "ext": "prop_ext"}
+const BOSS_MODELS := {"ground": "boss_locker", "hall": "boss_hall", "lab": "boss_lab", "toilet": "boss_toilet", "roof": "boss_roof", "music": "boss_music"}
 var sh_tex: Shader
 func _mm_textured(name: String, glb: String, count: int) -> void:
 	# 3D 모델(텍스처 있음)을 MultiMesh로: 맞으면 하얗게 번쩍, 정예는 금빛
@@ -1057,7 +1058,7 @@ func _yoyo_mesh(c: Color) -> ArrayMesh:
 
 func _make_multimeshes() -> void:
 	for kind in KINDS:
-		var glb := "res://models/%s.glb" % GHOST_MODELS.get(kind, "")
+		var glb := "res://models/%s.glb" % (BOSS_MODELS.get(stage, "boss_locker") if kind == "boss" else GHOST_MODELS.get(kind, ""))
 		if GHOST_MODELS.has(kind) and ResourceLoader.exists(glb):
 			_mm_textured(kind, glb, 4 if kind == "boss" else MAX_ENEMY)
 		else:
@@ -1918,9 +1919,15 @@ func _use_gacha(d: Dictionary) -> void:
 	_reward_panel("뽑기 결과!", got, coins, extra)
 
 func _drop(kind: String, pos: Vector3) -> void:
-	var mi := MeshInstance3D.new()
-	mi.mesh = {"heart": heart_mesh, "magnet": magnet_mesh, "chest": chest_mesh, "gacha": gacha_mesh}[kind]
-	mi.material_override = mat_vc
+	var mi: Node3D
+	var glb := "res://models/prop_%s.glb" % kind
+	if (kind == "gacha" or kind == "chest") and ResourceLoader.exists(glb):
+		mi = (load(glb) as PackedScene).instantiate()
+	else:
+		var m3 := MeshInstance3D.new()
+		m3.mesh = {"heart": heart_mesh, "magnet": magnet_mesh, "chest": chest_mesh, "gacha": gacha_mesh}[kind]
+		m3.material_override = mat_vc
+		mi = m3
 	add_child(mi)
 	var d := {"node": mi, "kind": kind, "pos": pos + Vector3(0, 0.5, 0), "t": 0.0}
 	if kind == "gacha":
@@ -1943,7 +1950,7 @@ func _drop(kind: String, pos: Vector3) -> void:
 func _update_drops(dt: float) -> void:
 	for d in drops.duplicate():
 		d["t"] += dt
-		var mi: MeshInstance3D = d["node"]
+		var mi: Node3D = d["node"]
 		if d["kind"] == "gacha":
 			mi.position = d["pos"]
 			mi.scale = Vector3.ONE * minf(1.0, d["t"] * 3.0) * (1.0 + 0.04 * sin(d["t"] * 6.0))
@@ -2377,7 +2384,7 @@ func _sync_draw() -> void:
 		var tint := Color(1, 1, 1)
 		if e["elite"]:
 			tint = Color(1.25, 1.05, 0.55).lerp(Color(1.4, 1.3, 0.9), 0.5 + 0.5 * sin(elapsed * 6.0))
-		if e["kind"] == "boss":
+		if e["kind"] == "boss" and not ResourceLoader.exists("res://models/%s.glb" % BOSS_MODELS.get(stage, "")):
 			tint = BOSS_TINT[stage]
 		if e["kind"] == "eraser" and e["dash_t"] > 0.45:
 			tint = Color(1.4, 0.8, 0.8)
@@ -3616,6 +3623,8 @@ func _setup_shot() -> void:
 		boss = _make_enemy("boss", Vector3(0, 0, -3))
 		boss["speed"] = 0.0
 		boss["summon"] = 999.0
+		boss["pat"] = "rest"
+		boss["pat_t"] = 999.0
 		for k in ["kettle", "eraser", "dust", "paper", "egg"]:
 			var e := _make_enemy(k, Vector3(-3.0 + ["kettle", "eraser", "dust", "paper", "egg"].find(k) * 1.5, 0, 0.5))
 			e["speed"] = 0.0
