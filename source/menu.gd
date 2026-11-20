@@ -18,7 +18,7 @@ func _ready() -> void:
 		if a == "--rich":
 			# 스크린샷용 가짜 진행도 (저장하지 않아요)
 			Save.data["coins"] = 480
-			Save.data["clears"] = {"ground": 2}
+			Save.data["clears"] = {"ground": 6}
 			Save.data["stats"] = {"total_kills": 650, "best_combo": 120, "elite_kills": 6}
 			Save.data["shop"] = {"dmg": 2, "hp": 1}
 			Save.data["bestiary"] = {"paper": 420, "egg": 180, "kettle": 30, "eraser": 20}
@@ -382,7 +382,7 @@ func _shop() -> void:
 # ---------- 친구들 ----------
 func _friends() -> void:
 	var vb := _page("퇴마단 친구들")
-	var tip := L("늦게 오는 친구일수록 힘이 세요!", 28, Color.WHITE, vb, 8)
+	var tip := L("단계를 깰수록 힘센 친구가 와요!", 28, Color.WHITE, vb, 8)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	for cid in Save.CHAR_ORDER:
 		var c: Dictionary = Save.CHARS[cid]
@@ -398,24 +398,14 @@ func _friends() -> void:
 		var pw := L("기본 피해 x%.1f" % float(c["power"]), 26, Color("#e8524a"), row)
 		pw.position = Vector2(175, 166)
 		if not open:
-			var a: Dictionary = Save.ach_by_id(c["unlock"])
-			var lk := L("도장 '%s'\n또는 동전으로" % a["name"], 22, Color("#8a7a95"), row)
+			var nd: Array = c["need"]
+			var lk := L("%s\n(지금 %d단계)" % [Save.char_need_text(cid), int(Save.data["clears"].get(nd[0], 0))], 24, Color("#8a7a95"), row)
 			lk.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 			lk.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			lk.offset_left = -260
+			lk.offset_left = -330
 			lk.offset_right = -24
-			lk.offset_top = 18
-			lk.offset_bottom = 80
-			var bcid: String = cid
-			var price: int = c["price"]
-			var buy_c := func():
-				if Save.buy_char(bcid):
-					main._play("coin", 1.0, -2.0)
-					main._play("evo", 1.0, -6.0)
-					show_screen("friends")
-			var bb := _right_btn(row, "동전 %d" % price, Color("#ffb03f"), int(Save.data["coins"]) >= price, buy_c, 190)
-			bb.offset_top = 10
-			bb.offset_bottom = 80
+			lk.offset_top = 22
+			lk.offset_bottom = 100
 		elif Save.data["char"] == cid:
 			_right_btn(row, "함께해요", Color("#2fc79a"), false, func(): pass, 170)
 		else:

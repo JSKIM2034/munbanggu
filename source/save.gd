@@ -50,10 +50,10 @@ const DAY_MODS := {
 const MAX_GRADE := 99
 
 const CHARS := {
-	"chulsoo": {"name": "철수", "weapon": "gun", "perk": "물총 피해 +10%", "unlock": "", "col": "#4fa8e8", "icon": "철", "power": 1.0, "price": 0},
-	"younghee": {"name": "영희", "weapon": "ddakji", "perk": "치명타 확률 +8%", "unlock": "kills500", "col": "#ff7aa8", "icon": "영", "power": 1.2, "price": 900},
-	"minsu": {"name": "민수", "weapon": "yoyo", "perk": "경험치 +15%", "unlock": "evo1", "col": "#2fc79a", "icon": "민", "power": 1.4, "price": 1800},
-	"sunja": {"name": "순자", "weapon": "rubber", "perk": "최대 하트 +2", "unlock": "clear_ground", "col": "#ff9a2f", "icon": "순", "power": 1.6, "price": 3000},
+	"chulsoo": {"name": "철수", "weapon": "gun", "perk": "물총 피해 +10%", "unlock": "", "need": [], "col": "#4fa8e8", "icon": "철", "power": 1.0},
+	"younghee": {"name": "영희", "weapon": "ddakji", "perk": "치명타 확률 +8%", "unlock": "", "need": ["ground", 5], "col": "#ff7aa8", "icon": "영", "power": 1.2},
+	"minsu": {"name": "민수", "weapon": "yoyo", "perk": "경험치 +15%", "unlock": "", "need": ["ground", 10], "col": "#2fc79a", "icon": "민", "power": 1.4},
+	"sunja": {"name": "순자", "weapon": "rubber", "perk": "최대 하트 +2", "unlock": "", "need": ["hall", 5], "col": "#ff9a2f", "icon": "순", "power": 1.6},
 }
 const CHAR_ORDER := ["chulsoo", "younghee", "minsu", "sunja"]
 
@@ -164,6 +164,8 @@ func load_data() -> void:
 		if d is Dictionary:
 			for k in d:
 				data[k] = d[k]
+	if not CHARS.has(data["char"]) or not char_unlocked(data["char"]):
+		data["char"] = "chulsoo"
 	_refresh_daily()
 
 func save_data() -> void:
@@ -246,22 +248,19 @@ func claim_ach(id: String) -> int:
 	save_data()
 	return int(a["reward"])
 
+# 친구는 장소 단계를 깨면 한 명씩 와요
 func char_unlocked(id: String) -> bool:
-	var u: String = CHARS[id]["unlock"]
-	if u == "" or data.get("bought_chars", []).has(id):
+	var nd: Array = CHARS[id]["need"]
+	if nd.is_empty():
 		return true
-	return ach_done(ach_by_id(u))
+	return int(data["clears"].get(nd[0], 0)) >= int(nd[1])
 
-func buy_char(id: String) -> bool:
-	var price: int = CHARS[id]["price"]
-	if char_unlocked(id) or int(data["coins"]) < price:
-		return false
-	data["coins"] -= price
-	if not data.has("bought_chars"):
-		data["bought_chars"] = []
-	data["bought_chars"].append(id)
-	save_data()
-	return true
+func char_need_text(id: String) -> String:
+	var nd: Array = CHARS[id]["need"]
+	return "%s %d단계를 깨면 와요" % [STAGES[nd[0]]["name"], int(nd[1])]
+
+func buy_char(_id: String) -> bool:
+	return false
 
 const UNLOCK_GRADE := 10
 func stage_unlocked(id: String) -> bool:
