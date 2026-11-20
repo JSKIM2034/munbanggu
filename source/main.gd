@@ -558,6 +558,11 @@ void fragment(){
 	add_child(mmi)
 	mm[name] = mmi
 
+func _fx_shader(code: String) -> Shader:
+	var sh := Shader.new()
+	sh.code = code
+	return sh
+
 func _mm(name: String, mesh: Mesh, count: int, lit: bool) -> void:
 	var m := MultiMesh.new()
 	m.transform_format = MultiMesh.TRANSFORM_3D
@@ -1102,9 +1107,43 @@ func _make_multimeshes() -> void:
 	SH.append([_box(Vector3(0.12, 0.06, 0.1)), T(Vector3(0, 0.1, -0.08)), Color("#f5f2ea")])
 	_mm("eshot", merge(SH), 120, true)
 	_mm("gem", _ddakji_mesh(Color.WHITE, Color(1, 1, 1).darkened(0.25)), 300, true)
-	_mm("bullet", _sph(0.13, -1, 8, 4), 80, false)
+	_mm("bullet", _sph(0.17, -1, 10, 5), 80, false)
 	_mm("drop", _sph(1.0, -1, 6, 3), 260, false)
-	_mm("star", _box(Vector3(0.12, 0.12, 0.02)), 120, false)
+	_mm("star", _box(Vector3(0.12, 0.12, 0.02)), 160, false)
+	# 빛나는 알갱이(더하기 섞기), 퍼지는 고리, 뭉게구름
+	_mm("glow", _sph(1.0, -1, 10, 5), 320, false)
+	(mm["glow"].material_override as ShaderMaterial).shader = _fx_shader("""
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_back, shadows_disabled;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){ float f = pow(clamp(dot(NORMAL, VIEW), 0.0, 1.0), 1.6); ALBEDO = cu.rgb; ALPHA = f * cu.a; }
+""")
+	_mm("bglow", _sph(1.0, -1, 10, 5), 80, false)
+	(mm["bglow"].material_override as ShaderMaterial).shader = (mm["glow"].material_override as ShaderMaterial).shader
+	var rq := PlaneMesh.new()
+	rq.size = Vector2(2, 2)
+	_mm("ring", rq, 90, false)
+	(mm["ring"].material_override as ShaderMaterial).shader = _fx_shader("""
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){
+  float d = length(UV - 0.5) * 2.0;
+  float a = smoothstep(0.62, 0.86, d) * (1.0 - smoothstep(0.9, 1.0, d));
+  float inner = (1.0 - smoothstep(0.0, 0.9, d)) * 0.05;
+  ALBEDO = cu.rgb; ALPHA = (a + inner) * cu.a;
+}
+""")
+	_mm("puff", _sph(1.0, -1, 10, 5), 140, false)
+	(mm["puff"].material_override as ShaderMaterial).shader = _fx_shader("""
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){ float f = pow(clamp(dot(NORMAL, VIEW), 0.0, 1.0), 0.8); ALBEDO = cu.rgb; ALPHA = f * cu.a; }
+""")
 	# 동그란 그림자
 	var q := PlaneMesh.new()
 	q.size = Vector2(1, 1)
@@ -1282,9 +1321,9 @@ func yoyo_stats() -> Dictionary:
 func _yoyo_base() -> Dictionary:
 	var l := lv("yoyo")
 	if evolved.has("yoyo"):
-		return {"count": 4, "dmg": 24.0, "dist": 6.5, "cool": 1.4, "chain": 3}
+		return {"count": 4, "dmg": 24.0, "dist": 4.3, "cool": 1.4, "chain": 3}
 	return {"count": 1 + (1 if l >= 2 else 0) + (1 if l >= 5 else 0), "dmg": 14.0 * (1.4 if l >= 3 else 1.0),
-		"dist": 4.5 * (1.3 if l >= 4 else 1.0), "cool": 1.7, "chain": 0}
+		"dist": 3.0 * (1.25 if l >= 4 else 1.0), "cool": 1.7, "chain": 0}
 
 func rubber_stats() -> Dictionary:
 	var d := _rubber_base()
@@ -1635,6 +1674,11 @@ func _hit_enemy(e: Dictionary, dmg: float, dir: Vector3, knock := 5.0, quiet := 
 	_number(pos + Vector3(0, 1.3, 0), int(round(dmg)), crit)
 	_burst(pos + Vector3(0, 0.55, 0), Color(0.7, 0.9, 1.0, 0.9), 3, 3.0)
 	if not quiet:
+		_sparkle(pos + Vector3(0, 0.6, 0), Color(1.0, 0.95, 0.7, 0.9), 1, 3.5, 0.12, 0.25)
+	if crit:
+		_ring(pos, Color(1.0, 0.85, 0.2, 1.0), 0.2, 1.4, 0.35)
+		_burst(pos + Vector3(0, 0.7, 0), Color("#ffdf3d"), 6, 5.0, true)
+	if not quiet:
 		_play("hit", rng.randf_range(0.9, 1.15) + (0.25 if crit else 0.0), -5.0)
 	if crit:
 		shake = maxf(shake, 0.12)
@@ -1646,6 +1690,9 @@ func _kill_enemy(e: Dictionary) -> void:
 		e["dead"] = 0.0
 		var pp: Vector3 = e["pos"]
 		_burst(pp + Vector3(0, 0.5, 0), Color(KINDS[e["kind"]]["col"]), 12, 5.0)
+		for i in 4:
+			_puff(pp + Vector3(0, 0.4, 0), 0.3, 0.5, Color(0.85, 0.8, 0.75, 0.7))
+		_ring(pp, Color(1, 0.8, 0.4, 0.9), 0.2, 1.5, 0.4)
 		_burst(pp + Vector3(0, 0.5, 0), Color("#fff27a"), 6, 5.0, true)
 		_play("pop", 0.7, -3.0)
 		var r := rng.randf()
@@ -1673,7 +1720,15 @@ func _kill_enemy(e: Dictionary) -> void:
 	var col := Color(KINDS[e["kind"]]["col"])
 	var big: bool = e["elite"] or e["kind"] == "boss"
 	_burst(pos + Vector3(0, 0.6, 0), col, 16 if big else 7, 6.0 if big else 4.5)
-	_burst(pos + Vector3(0, 0.6, 0), Color("#fff27a"), 14 if big else 4, 6.0 if big else 5.0, true)
+	var confetti := [Color("#ff7aa8"), Color("#ffd23f"), Color("#6ee0b0"), Color("#58c6f2"), Color("#c9a8f0")]
+	for i in (18 if big else 4):
+		var cv := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.8, 1.6), rng.randf_range(-1, 1)).normalized() * rng.randf_range(3.0, 6.5)
+		_part("star", pos + Vector3(0, 0.6, 0), cv, confetti[rng.randi() % confetti.size()], 1.0, 0.6, rng.randf_range(-14, 14))
+	for i in (6 if big else 2):
+		_puff(pos + Vector3(rng.randf_range(-0.3, 0.3), 0.5, rng.randf_range(-0.3, 0.3)), 0.28 * (1.8 if big else 1.0), 0.45)
+	_ring(pos, Color(col.r, col.g, col.b, 0.9), 0.2, 1.6 if not big else 4.0, 0.4 if not big else 0.7)
+	_glow(pos + Vector3(0, 0.8, 0), Vector3(rng.randf_range(-0.4, 0.4), 2.4, 0), Color(0.9, 0.95, 1.0, 0.8), 0.22, 0.9, -1.0)
+	_glow(pos + Vector3(0, 0.6, 0), Vector3.ZERO, Color(1, 1, 0.85, 1.0), 0.9 if big else 0.55, 0.14)
 	for i in int(e["xp"]):
 		gems.append({"pos": pos + Vector3(0, 0.25, 0), "vel": Vector3(rng.randf_range(-1.5, 1.5), 3.5, rng.randf_range(-1.5, 1.5)) * (1.6 if i > 0 else 1.0),
 			"pull": false, "t": 0.0, "col": [Color("#ff7aa8"), Color("#ffd23f"), Color("#6ee0b0"), Color("#9b8cff")][rng.randi() % 4]})
@@ -2027,6 +2082,8 @@ func _weapons(dt: float) -> void:
 				bullets.append({"pos": start, "dir": dir, "life": 0.85, "pierce": gs["pierce"], "hit": [], "trail": 0.0,
 					"dmg": gs["dmg"], "size": gs["size"] * area_mult(), "splash": gs["splash"], "splash_p": gs["splash_p"]})
 			recoil = 1.0
+			var mz := gun.global_position + face_dir * 0.4
+			_glow(mz, face_dir * 2.0, Color(0.6, 0.9, 1.0, 0.9), 0.28 * gs["size"], 0.12)
 			_play("shoot" if not evolved.has("gun") else "blast", rng.randf_range(0.95, 1.1), -9.0)
 	_update_bullets(dt)
 	# 딱지 (빙글빙글)
@@ -2053,6 +2110,9 @@ func _weapons(dt: float) -> void:
 			mi.position = p
 			mi.rotation = Vector3(0.5, -a * 2.0, 0.3)
 			mi.scale = Vector3.ONE * (1.6 if evolved.has("ddakji") else 1.15) * area_mult()
+			if Engine.get_process_frames() % 4 == i % 4:
+				var tc := Color(0.9, 0.6, 0.1, 0.45) if evolved.has("ddakji") else Color(1.0, 0.4, 0.65, 0.5)
+				_glow(p, Vector3.ZERO, tc, 0.2 * area_mult(), 0.25)
 			for e in enemies:
 				if e["dead"] >= 0.0:
 					continue
@@ -2077,7 +2137,15 @@ func _weapons(dt: float) -> void:
 				mi.mesh = yoyo_evo_mesh if evolved.has("yoyo") else yoyo_mesh
 				mi.material_override = mat_vc
 				add_child(mi)
-				yoyos.append({"node": mi, "dir": dir, "t": 0.0, "dist": ys["dist"] * area_mult(), "dmg": ys["dmg"], "chain": ys["chain"], "hit": {}})
+				var line := MeshInstance3D.new()
+				line.mesh = _box(Vector3(0.035, 0.035, 1.0))
+				var lm := StandardMaterial3D.new()
+				lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+				lm.albedo_color = Color(1.0, 0.95, 0.6) if evolved.has("yoyo") else Color(0.85, 1.0, 0.9)
+				line.material_override = lm
+				line.visible = false
+				add_child(line)
+				yoyos.append({"line": line, "node": mi, "dir": dir, "t": 0.0, "dist": ys["dist"] * area_mult(), "dmg": ys["dmg"], "chain": ys["chain"], "hit": {}})
 			_play("yoyo", 1.0, -8.0)
 		for y in yoyos.duplicate():
 			y["t"] += dt / 0.9
@@ -2085,8 +2153,18 @@ func _weapons(dt: float) -> void:
 			var p: Vector3 = player.position + y["dir"] * y["dist"] * k + Vector3(0, 0.6, 0)
 			var mi: MeshInstance3D = y["node"]
 			mi.position = p
-			mi.rotation = Vector3(PI / 2, atan2(y["dir"].x, y["dir"].z), y["t"] * 30.0)
-			mi.scale = Vector3.ONE * 1.4 * area_mult()
+			# 위에서 내려다보는 카메라에 동그란 면이 보이게 눕혀서 팽이처럼 돌려요
+			mi.rotation = Vector3(0.35, y["t"] * 30.0, 0.0)
+			mi.scale = Vector3.ONE * 1.9 * area_mult()
+			var ln: MeshInstance3D = y["line"]
+			var hand := player.position + Vector3(0, 0.7, 0)
+			var dl := p - hand
+			if dl.length() > 0.05:
+				ln.visible = true
+				ln.look_at_from_position((p + hand) / 2.0, p, Vector3.UP if absf(dl.normalized().y) < 0.99 else Vector3.RIGHT)
+				ln.scale = Vector3(1, 1, dl.length())
+			var yc := Color(1.0, 0.85, 0.2, 0.8) if evolved.has("yoyo") else Color(0.3, 1.0, 0.75, 0.7)
+			_glow(p, Vector3.ZERO, yc, 0.3 * area_mult(), 0.22)
 			for e in enemies:
 				if e["dead"] >= 0.0:
 					continue
@@ -2099,6 +2177,7 @@ func _weapons(dt: float) -> void:
 							_chain(e, int(y["chain"]), y["dmg"] * 0.6)
 			if y["t"] >= 1.0:
 				mi.queue_free()
+				(y["line"] as Node).queue_free()
 				yoyos.erase(y)
 	# 고무줄
 	if mains.has("rubber"):
@@ -2144,7 +2223,7 @@ func _weapons(dt: float) -> void:
 
 func _rubber_wave(rs: Dictionary, delay: float, col := Color("#ff9a2f")) -> void:
 	var tm := TorusMesh.new()
-	tm.inner_radius = 0.92
+	tm.inner_radius = 0.86
 	tm.outer_radius = 1.0
 	tm.rings = 48
 	tm.ring_segments = 6
@@ -2161,6 +2240,14 @@ func _rubber_wave(rs: Dictionary, delay: float, col := Color("#ff9a2f")) -> void
 		"hit": {}, "done": false, "rainbow": rs["double"]})
 	_play("rubber", 1.0 + (0.2 if delay > 0 else 0.0), -6.0)
 	shake = maxf(shake, 0.1)
+	if rs["dmg"] > 0.0:
+		var rcol := Color(col.r, col.g, col.b, 0.6)
+		_ring(player.position, rcol, 0.3, rs["radius"] * area_mult() * 1.05, 0.45)
+		for i in 10:
+			var a := TAU * i / 10.0
+			var dv := Vector3(cos(a), 0, sin(a))
+			_puff(player.position + dv * 0.8 + Vector3(0, 0.2, 0), 0.18, 0.4, Color(0.95, 0.85, 0.7, 0.6))
+			_glow(player.position + Vector3(0, 0.3, 0), dv * rs["radius"] * 2.6, rcol, 0.16, 0.38)
 
 func _chain(from: Dictionary, n: int, dmg: float) -> void:
 	var cur := from
@@ -2187,10 +2274,12 @@ func _bolt(a: Vector3, b: Vector3) -> void:
 	if a.distance_to(b) < 0.05:
 		return
 	var mi := MeshInstance3D.new()
-	mi.mesh = _box(Vector3(0.07, 0.07, 1.0))
+	mi.mesh = _box(Vector3(0.13, 0.13, 1.0))
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_color = Color("#fff36b")
+	m.albedo_color = Color("#fff9b0")
+	_glow(b, Vector3.ZERO, Color(1.0, 0.95, 0.3, 1.0), 0.6, 0.2)
+	_sparkle(b, Color(1.0, 0.9, 0.3, 1.0), 4, 4.0, 0.09, 0.25)
 	mi.material_override = m
 	add_child(mi)
 	mi.look_at_from_position((a + b) / 2.0, b, Vector3.UP if absf((b - a).normalized().y) < 0.99 else Vector3.RIGHT)
@@ -2204,7 +2293,7 @@ func _update_bullets(dt: float) -> void:
 		b["trail"] -= dt
 		if b["trail"] <= 0.0:
 			b["trail"] = 0.06
-			_part("drop", b["pos"], -b["dir"] + Vector3(0, 1, 0), Color(0.7, 0.9, 1.0, 0.7), 0.05 * b["size"], 0.25)
+			_glow(b["pos"], -b["dir"] * 1.5, Color(0.35, 0.7, 1.0, 0.7), 0.13 * b["size"], 0.28)
 		var done: bool = b["life"] <= 0.0
 		for e in enemies:
 			if e["dead"] >= 0.0 or b["hit"].has(e):
@@ -2218,7 +2307,8 @@ func _update_bullets(dt: float) -> void:
 					done = true
 					break
 		if done:
-			_burst(b["pos"], Color(0.65, 0.88, 1.0, 0.85), 4, 2.5)
+			_burst(b["pos"], Color(0.65, 0.88, 1.0, 0.85), 6, 3.0)
+			_ring(b["pos"], Color(0.45, 0.8, 1.0, 0.9), 0.1, 0.7 * b["size"], 0.3)
 			bullets.erase(b)
 
 func _splash(pos: Vector3, r: float, skip: Dictionary, dmg: float) -> void:
@@ -2254,6 +2344,7 @@ func _update_gems(dt: float) -> void:
 			g["pos"].y = 0.08
 			g["vel"] = Vector3(g["vel"].x * 0.5, absf(g["vel"].y) * 0.3, g["vel"].z * 0.5)
 		if g["pull"] and d.length() < 0.4:
+			_glow(player.position + Vector3(0, 0.7, 0), Vector3(0, 1.5, 0), Color(1.0, 0.85, 0.3, 0.7) if g.get("coin", false) else Color(0.6, 1.0, 0.8, 0.5), 0.2, 0.25)
 			if g.get("coin", false):
 				var v := maxi(1, int(round(coin_mult())))
 				run_coins += v
@@ -2290,10 +2381,25 @@ func _gain_xp(v: int) -> void:
 func hitstop(d: float) -> void:
 	hitstop_left = maxf(hitstop_left, d)
 
-func _part(kind: String, pos: Vector3, vel: Vector3, col: Color, size: float, life: float, spin := 0.0) -> void:
-	if parts.size() > 360:
+func _part(kind: String, pos: Vector3, vel: Vector3, col: Color, size: float, life: float, spin := 0.0, grav := 9.0, grow := 0.0) -> void:
+	if parts.size() > 420:
 		parts.pop_front()
-	parts.append({"kind": kind, "pos": pos, "vel": vel, "col": col, "size": size, "life": life, "t": 0.0, "spin": spin, "rot": 0.0})
+	parts.append({"kind": kind, "pos": pos, "vel": vel, "col": col, "size": size, "life": life, "t": 0.0, "spin": spin, "rot": 0.0, "grav": grav, "grow": grow})
+
+func _glow(pos: Vector3, vel: Vector3, col: Color, size: float, life: float, grav := 0.0) -> void:
+	_part("glow", pos, vel, col, size, life, 0.0, grav)
+
+func _ring(pos: Vector3, col: Color, r0: float, r1: float, life: float) -> void:
+	_part("ring", Vector3(pos.x, 0.08, pos.z), Vector3.ZERO, col, r0, life, 0.0, 0.0, r1)
+
+func _puff(pos: Vector3, size: float, life: float, col := Color(1, 1, 1, 0.75)) -> void:
+	var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.5, 1.5), rng.randf_range(-1, 1)) * 1.2
+	_part("puff", pos, v, col, size, life, 0.0, 0.0, size * 1.8)
+
+func _sparkle(pos: Vector3, col: Color, n: int, spd: float, size := 0.12, life := 0.45) -> void:
+	for i in n:
+		var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.2, 1.3), rng.randf_range(-1, 1)).normalized() * spd * rng.randf_range(0.4, 1.0)
+		_glow(pos, v, col, size * rng.randf_range(0.7, 1.3), life * rng.randf_range(0.7, 1.2), 6.0)
 
 func _burst(pos: Vector3, col: Color, count: int, spd: float, stars := false) -> void:
 	for i in count:
@@ -2326,17 +2432,10 @@ func _number(pos: Vector3, v: int, crit: bool, txt := "") -> void:
 	l.visible = true
 	n["t"] = 0.0
 
+var fx_dt := 0.0
 func _update_fx(dt: float) -> void:
-	var keep: Array = []
-	for p in parts:
-		p["t"] += dt
-		if p["t"] >= p["life"]:
-			continue
-		p["vel"].y -= 9.0 * dt
-		p["pos"] += p["vel"] * dt
-		p["rot"] += p["spin"] * dt
-		keep.append(p)
-	parts = keep
+	# 조각은 그리면서 한 번에 움직여요 (_sync_draw). 여기서는 시간만 넘겨요
+	fx_dt += dt
 	for n in numbers:
 		if n["t"] > 0.6:
 			continue
@@ -2427,17 +2526,71 @@ func _sync_draw() -> void:
 		var b: Dictionary = bullets[i]
 		var basis := Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.85, 0.85, 1.7) * b["size"])
 		bm.set_instance_transform(i, Transform3D(basis, b["pos"]))
-		bm.set_instance_custom_data(i, Color(0.55, 0.86, 1.0, 0.92) if b["splash"] == 0.0 else Color(0.35, 0.7, 1.0, 0.95))
+		bm.set_instance_custom_data(i, Color(0.7, 0.92, 1.0, 0.95) if b["splash"] == 0.0 else Color(0.45, 0.78, 1.0, 0.97))
+		var bg: MultiMesh = mm["bglow"].multimesh
+		bg.set_instance_transform(i, Transform3D(Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.42, 0.42, 0.75) * b["size"]), b["pos"]))
+		bg.set_instance_custom_data(i, Color(0.15, 0.45, 0.9, 0.5))
 	bm.visible_instance_count = bn
+	mm["bglow"].multimesh.visible_instance_count = bn
 	# 조각
 	var dm: MultiMesh = mm["drop"].multimesh
 	var stm: MultiMesh = mm["star"].multimesh
+	var gm2: MultiMesh = mm["glow"].multimesh
+	var rm: MultiMesh = mm["ring"].multimesh
+	var pm2: MultiMesh = mm["puff"].multimesh
 	var dn := 0
 	var sn := 0
+	var gn := 0
+	var rn := 0
+	var pn := 0
+	var dt := fx_dt
+	fx_dt = 0.0
+	var damp := 1.0 - minf(1.0, dt * 2.5)
+	var keep: Array = []
 	for p in parts:
-		var k: float = 1.0 - p["t"] / p["life"]
+		var pt: float = p["t"] + dt
+		if pt >= p["life"]:
+			continue
+		p["t"] = pt
+		var kind: String = p["kind"]
+		var vel: Vector3 = p["vel"]
+		vel.y -= p["grav"] * dt
+		if kind == "puff" or kind == "glow":
+			vel *= damp
+		p["vel"] = vel
+		p["pos"] += vel * dt
+		if kind == "star":
+			p["rot"] += p["spin"] * dt
+		keep.append(p)
+		var k: float = 1.0 - pt / p["life"]
+		var c: Color = p["col"]
+		match p["kind"]:
+			"glow":
+				if gn >= 320:
+					continue
+				gm2.set_instance_transform(gn, Transform3D(Basis().scaled(Vector3.ONE * p["size"] * (0.4 + 0.6 * k)), p["pos"]))
+				gm2.set_instance_custom_data(gn, Color(c.r, c.g, c.b, c.a * k))
+				gn += 1
+				continue
+			"ring":
+				if rn >= 90:
+					continue
+				var e := 1.0 - pow(k, 3.0)
+				var r: float = lerpf(p["size"], p["grow"], e)
+				rm.set_instance_transform(rn, Transform3D(Basis().scaled(Vector3(r, 1, r)), p["pos"]))
+				rm.set_instance_custom_data(rn, Color(c.r, c.g, c.b, c.a * k))
+				rn += 1
+				continue
+			"puff":
+				if pn >= 140:
+					continue
+				var r2: float = lerpf(p["size"], p["grow"], 1.0 - k * k)
+				pm2.set_instance_transform(pn, Transform3D(Basis().scaled(Vector3.ONE * r2), p["pos"]))
+				pm2.set_instance_custom_data(pn, Color(c.r, c.g, c.b, c.a * k))
+				pn += 1
+				continue
 		if p["kind"] == "star":
-			if sn >= 120:
+			if sn >= 160:
 				continue
 			stm.set_instance_transform(sn, Transform3D(Basis(Vector3.BACK, p["rot"] + 0.785).scaled(Vector3.ONE * k * 1.3), p["pos"]))
 			stm.set_instance_custom_data(sn, p["col"])
@@ -2448,8 +2601,12 @@ func _sync_draw() -> void:
 			dm.set_instance_transform(dn, Transform3D(Basis().scaled(Vector3.ONE * p["size"] * k), p["pos"]))
 			dm.set_instance_custom_data(dn, p["col"])
 			dn += 1
+	parts = keep
 	dm.visible_instance_count = dn
 	stm.visible_instance_count = sn
+	gm2.visible_instance_count = gn
+	rm.visible_instance_count = rn
+	pm2.visible_instance_count = pn
 
 var god := false
 func _player_hurt(from: Vector3, amount := 1) -> void:
@@ -2502,7 +2659,9 @@ func _process(delta: float) -> void:
 			cam_off = cam.position - player.position
 			for e in enemies:
 				e["hp"] = 99999.0
-		if shot_frames == (34 if shot_mode == "boss" else 110) and perf_frames == 0:
+		if shot_mode == "allw" and shot_frames in [40, 55]:
+			get_viewport().get_texture().get_image().save_png("/tmp/shot_allw_%d.png" % shot_frames)
+		if shot_frames == (34 if shot_mode == "boss" else (70 if shot_mode == "allw" else (32 if shot_mode == "kills" else 110))) and perf_frames == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_%s.png" % shot_mode)
 			get_tree().quit()
 	if perf_frames > 0 and Engine.get_process_frames() % 60 == 0:
@@ -3085,7 +3244,15 @@ func _card_pool() -> Array:
 		out.append({"type": "heal", "id": "heal"})
 	return out
 
+func _level_fx() -> void:
+	_ring(player.position, Color(1.0, 0.85, 0.3, 1.0), 0.3, 3.0, 0.6)
+	_ring(player.position, Color(0.5, 1.0, 0.8, 0.8), 0.2, 2.0, 0.5)
+	for i in 24:
+		var a := TAU * i / 24.0
+		_glow(player.position + Vector3(cos(a) * 0.6, 0.1, sin(a) * 0.6), Vector3(0, rng.randf_range(4, 8), 0), Color(1.0, 0.9, 0.4, 0.9), 0.14, 0.7, 2.0)
+
 func _level_up() -> void:
+	_level_fx()
 	paused = true
 	stick_index = -1
 	stick_vec = Vector2.ZERO
@@ -3380,6 +3547,11 @@ func _card_info(c: Dictionary) -> Dictionary:
 
 func _evo_fx() -> void:
 	shake = 0.4
+	for i in 4:
+		_ring(player.position, Color.from_hsv(i / 4.0, 0.6, 1.0, 1.0), 0.3, 3.0 + i * 1.6, 0.6 + i * 0.15)
+	for i in 30:
+		var a := TAU * i / 30.0
+		_glow(player.position + Vector3(0, 0.8, 0), Vector3(cos(a), 0.4, sin(a)) * 7.0, Color.from_hsv(float(i) / 30.0, 0.5, 1.0, 1.0), 0.2, 0.8)
 	for i in 30:
 		var a := TAU * i / 30.0
 		_part("star", player.position + Vector3(0, 0.8, 0), Vector3(cos(a) * 6.0, rng.randf_range(2, 6), sin(a) * 6.0),
@@ -3666,6 +3838,34 @@ func _setup_shot() -> void:
 		_refresh_slots()
 	if shot_mode == "cards" or shot_mode == "evocard":
 		_level_up()
+	if shot_mode == "kills":
+		enemies.clear()
+		for i in 30:
+			var a := TAU * i / 30.0
+			var e := _make_enemy(["paper", "egg", "kettle"][i % 3], Vector3(cos(a), 0, sin(a)) * rng.randf_range(1.6, 4.0))
+			e["hp"] = 8.0
+			e["speed"] = 0.8
+			e["spawn"] = 1.0
+		mains["rubber"] = 3
+		main_order.append("rubber")
+		cd["rubber"] = 0.6
+		xp_need = 99999
+		spawn_timer = 999.0
+		next_elite = 9999.0
+	if shot_mode == "allw":
+		enemies.clear()
+		for i in 14:
+			var a := TAU * i / 14.0
+			var e := _make_enemy("paper", Vector3(cos(a), 0, sin(a)) * rng.randf_range(2.0, 5.0))
+			e["hp"] = 99999.0
+			e["speed"] = 0.3
+			e["spawn"] = 1.0
+		for id in ["ddakji", "yoyo", "rubber"]:
+			main_order.append(id)
+			mains[id] = 4
+		mains["gun"] = 4
+		spawn_timer = 999.0
+		next_elite = 9999.0
 	if shot_mode == "pause":
 		mains["ddakji"] = 3
 		main_order.append("ddakji")
