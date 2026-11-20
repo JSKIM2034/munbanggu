@@ -104,7 +104,30 @@ func _ready() -> void:
 
 func _default() -> Dictionary:
 	return {"coins": 0, "shop": {}, "char": "chulsoo", "clears": {}, "stats": {}, "ach_claimed": [],
-		"bestiary": {}, "daily": {}, "best": {}, "runs": 0, "seen_unlock": []}
+		"bestiary": {}, "daily": {}, "best": {}, "runs": 0, "seen_unlock": [], "tut": {},
+		"opt": {"bgm": true, "sfx": true, "vib": true, "shake": true, "nums": true}}
+
+func opt(key: String) -> bool:
+	return bool(data["opt"].get(key, true))
+
+func set_opt(key: String, v: bool) -> void:
+	data["opt"][key] = v
+	save_data()
+
+func tut_seen(key: String) -> bool:
+	return data["tut"].get(key, false)
+
+func tut_mark(key: String) -> void:
+	data["tut"][key] = true
+	save_data()
+
+func affordable() -> Array:
+	var out: Array = []
+	for it in SHOP:
+		var c := shop_cost(it["id"])
+		if c >= 0 and int(data["coins"]) >= c:
+			out.append(it)
+	return out
 
 func load_data() -> void:
 	data = _default()

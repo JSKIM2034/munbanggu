@@ -27,6 +27,24 @@ html = re.sub(r"<title>.*?</title>", "<title>문방구 퇴마단</title>", html)
 html = re.sub(r"var parts = \[.*?\];", "var parts = " + json.dumps(parts).replace('"', "'").replace(",", ", ") + ";", html)
 new_cfg = re.search(r"const GODOT_CONFIG = (\{.*?\});", open(os.path.join(out, "index.html"), encoding="utf-8").read()).group(1)
 html = re.sub(r"const GODOT_CONFIG = \{.*?\};", "const GODOT_CONFIG = " + new_cfg + ";", html)
+# 홈 화면에 추가 (앱처럼 꽉 찬 화면)
+from PIL import Image
+icon = Image.open(os.path.join(SRC, "icon.png"))
+for n in (192, 512):
+    icon.resize((n, n)).save(os.path.join(ROOT, "index.icon%d.png" % n))
+manifest = {"name": "문방구 퇴마단", "short_name": "퇴마단", "start_url": "./index.html", "display": "fullscreen",
+    "orientation": "portrait", "background_color": "#3a2148", "theme_color": "#4fa8e8",
+    "icons": [{"src": "index.icon192.png", "sizes": "192x192", "type": "image/png"},
+              {"src": "index.icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
+open(os.path.join(ROOT, "index.manifest.json"), "w", encoding="utf-8").write(json.dumps(manifest, ensure_ascii=False, indent=1))
+head = """<link rel="manifest" href="index.manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="퇴마단">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#4fa8e8">
+"""
+html = html.replace("</head>", head + "</head>", 1)
 open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8").write(html)
 shutil.rmtree(out)
 print("OK", parts, len(wasm), os.path.getsize(os.path.join(ROOT, "index.pck")))

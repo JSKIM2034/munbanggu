@@ -40,6 +40,11 @@ var beat_n := 0
 var gacha_used := 0
 var ev_done := {}
 var next_props := 55.0
+var bgm: AudioStreamPlayer
+var tut_move_t := 0.0
+var tut_node: Control
+var indicators: Array = []
+var lv5_told := {}
 var env_ref: Environment
 var sun_ref: DirectionalLight3D
 const STAGE_FROM := {
@@ -260,6 +265,9 @@ func _ready() -> void:
 	_make_sounds()
 	hp = max_hp()
 	_refresh_ui()
+	bgm = AudioStreamPlayer.new()
+	add_child(bgm)
+	_play_bgm("menu" if in_menu else stage)
 	if in_menu:
 		hud.visible = false
 		cam_off = Vector3(0.0, 2.3, 5.2)
@@ -279,6 +287,109 @@ func _ready() -> void:
 		bt = "주간 도전!\n" + bt
 	_banner(bt, Color.WHITE)
 	_spawn_props(6)
+	if not Save.tut_seen("move") and shot_mode == "" and not auto_play:
+		_make_move_tut()
+	for i in 6:
+		var pnl := Panel.new()
+		pnl.size = Vector2(84, 84)
+		pnl.pivot_offset = Vector2(42, 42)
+		pnl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pnl.visible = false
+		hud.add_child(pnl)
+		var il := _label("", 30, Color.WHITE, pnl, 8)
+		il.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		il.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		il.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		indicators.append([pnl, il])
+
+func _make_move_tut() -> void:
+	tut_node = Control.new()
+	tut_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tut_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(tut_node)
+	var l := _label("화면을 누른 채로 끌면 움직여요\n공격은 저절로! 귀신을 피해 다녀요", 38, Color.WHITE, tut_node, 12)
+	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.offset_left = -340
+	l.offset_right = 340
+	l.offset_top = -420
+	l.offset_bottom = -320
+	var ring := Panel.new()
+	ring.add_theme_stylebox_override("panel", _round_panel(Color(1, 1, 1, 0.25), 70, Color(1, 1, 1, 0.9), 6))
+	ring.size = Vector2(140, 140)
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tut_node.add_child(ring)
+	var dot := Panel.new()
+	dot.add_theme_stylebox_override("panel", _round_panel(Color("#ffdf3d"), 30, Color("#3a2148"), 5))
+	dot.size = Vector2(60, 60)
+	dot.position = Vector2(40, 40)
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ring.add_child(dot)
+	ring.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	ring.position = Vector2(get_viewport().get_visible_rect().size.x / 2.0 - 70, get_viewport().get_visible_rect().size.y - 300)
+	var tw := dot.create_tween().set_loops()
+	tw.tween_property(dot, "position", Vector2(85, 40), 0.5).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(dot, "position", Vector2(-5, 40), 1.0).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(dot, "position", Vector2(40, 40), 0.5).set_trans(Tween.TRANS_SINE)
+
+func _update_tut_and_hints(dt: float) -> void:
+	if tut_node:
+		if move_dir.length() > 0.2:
+			tut_move_t += dt
+		if tut_move_t > 1.5 or elapsed > 12.0:
+			tut_node.queue_free()
+			tut_node = null
+			Save.tut_mark("move")
+	for id in mains:
+		if mains[id] >= MAX_LV and not evolved.has(id) and not lv5_told.has(id):
+			lv5_told[id] = true
+			var pn: String = SUPPORTS[MAINS[id]["partner"]]["name"]
+			if supports.has(MAINS[id]["partner"]):
+				_banner("%s Lv.5! 다음 레벨업에 진화해요" % MAINS[id]["name"], Color("#ffd23f"))
+			else:
+				_banner("%s Lv.5! 짝꿍 %s 챙기면 진화!" % [MAINS[id]["name"], pn], Color("#ffd23f"))
+
+func _update_indicators() -> void:
+	# 화면 밖에 있는 보스, 정예 귀신, 뽑기통, 보물 상자를 가장자리에 알려 줘요
+	var targets: Array = []
+	if not boss.is_empty() and boss["dead"] < 0.0:
+		targets.append([boss["pos"], "보스", Color("#e8524a")])
+	for e in enemies:
+		if e["elite"] and e["dead"] < 0.0:
+			targets.append([e["pos"], "!", Color("#ffb03f")])
+	for d in drops:
+		if d["kind"] == "gacha":
+			targets.append([d["pos"], "뽑", Color("#ff9a2f")])
+		elif d["kind"] == "chest":
+			targets.append([d["pos"], "상", Color("#b5713a")])
+	var rect := get_viewport().get_visible_rect().size
+	var scale_v := rect / Vector2(get_viewport().size)
+	var n := 0
+	for tg in targets:
+		if n >= indicators.size():
+			break
+		var wp: Vector3 = tg[0] + Vector3(0, 0.8, 0)
+		var sp := cam.unproject_position(wp) * scale_v
+		var behind := cam.is_position_behind(wp)
+		var m := 60.0
+		if not behind and sp.x > m and sp.x < rect.x - m and sp.y > 200 and sp.y < rect.y - m:
+			continue
+		var c := rect / 2.0
+		var dir := (sp - c) if not behind else (c - sp)
+		var k := minf((rect.x / 2.0 - m) / maxf(absf(dir.x), 0.001), (rect.y / 2.0 - m) / maxf(absf(dir.y), 0.001))
+		var pos := c + dir * minf(k, 1.0)
+		pos.y = maxf(pos.y, 230.0)
+		var pnl: Panel = indicators[n][0]
+		var il: Label = indicators[n][1]
+		pnl.visible = true
+		pnl.position = pos - pnl.size / 2.0
+		pnl.add_theme_stylebox_override("panel", _round_panel(tg[2], 42, Color.WHITE, 5))
+		pnl.scale = Vector2.ONE * (1.0 + 0.1 * sin(elapsed * 8.0))
+		il.text = tg[1]
+		il.add_theme_font_size_override("font_size", 26 if tg[1].length() > 1 else 40)
+		n += 1
+	for i in range(n, indicators.size()):
+		indicators[i][0].visible = false
 
 func _prewarm() -> void:
 	# 처음 쓰는 효과의 셰이더가 게임 도중 준비되느라 멈칫하지 않게, 땅 밑에서 한 번씩 그려 둬요
@@ -1020,6 +1131,8 @@ func mains_def() -> Dictionary:
 	return MAINS
 func kinds_def() -> Dictionary:
 	return KINDS
+func supports_def() -> Dictionary:
+	return SUPPORTS
 
 func lv(id: String) -> int:
 	return int(mains.get(id, 0)) + int(supports.get(id, 0))
@@ -1317,6 +1430,7 @@ func _event_logic() -> void:
 		p.x = clampf(p.x, -AX, AX)
 		boss = _make_enemy("boss", p)
 		shake = 0.5
+		_play_bgm("boss")
 
 func _update_enemies(dt: float) -> void:
 	var alive: Array = []
@@ -1500,6 +1614,8 @@ func _kill_enemy(e: Dictionary) -> void:
 		shake = 0.8
 		get_tree().create_timer(1.2).timeout.connect(func(): _end_game(true))
 	_play("pop", 1.0 + minf(combo, 12) * 0.04, -3.0)
+	if e["elite"]:
+		_vib(40)
 	if hitstop_cool <= 0.0:
 		hitstop(0.035)
 		hitstop_cool = 0.15
@@ -2093,6 +2209,8 @@ func _burst(pos: Vector3, col: Color, count: int, spd: float, stars := false) ->
 			_part("drop", pos, v, col, rng.randf_range(0.05, 0.09), 0.35)
 
 func _number(pos: Vector3, v: int, crit: bool, txt := "") -> void:
+	if txt == "" and not Save.opt("nums"):
+		return
 	if numbers.size() < 12:
 		var l := Label3D.new()
 		l.font = font
@@ -2248,7 +2366,7 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 	shake = 0.35
 	hitstop(0.08)
 	_play("hurt", 1.0, -3.0)
-	Input.vibrate_handheld(120)
+	_vib(120)
 	var away := player.position - from
 	away.y = 0
 	player.position += away.normalized() * 0.6
@@ -2349,6 +2467,8 @@ func _process(delta: float) -> void:
 	_animate_player(dt)
 	var t4 := Time.get_ticks_usec()
 	_sync_draw()
+	_update_tut_and_hints(dt)
+	_update_indicators()
 	var t5 := Time.get_ticks_usec()
 	prof[0] += t1 - t0; prof[1] += t2 - t1; prof[2] += t3 - t2; prof[3] += t4 - t3; prof[4] += t5 - t4; prof[5] += 1
 	if prof[5] >= 300:
@@ -2400,7 +2520,7 @@ func _push_out(pos: Vector3, r: float) -> Vector3:
 func _update_camera(dt: float) -> void:
 	cam.position = cam.position.lerp(player.position + cam_off, minf(1.0, dt * 6.0))
 	shake = move_toward(shake, 0.0, dt * 1.2)
-	var s := shake * shake * 2.2
+	var s := shake * shake * 2.2 * (1.0 if Save.opt("shake") else 0.0)
 	cam.h_offset = rng.randf_range(-s, s)
 	cam.v_offset = rng.randf_range(-s, s)
 
@@ -2598,6 +2718,26 @@ func _refresh_ui() -> void:
 	hearts_label.text = h
 	level_label.text = "Lv.%d" % level
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		if not in_menu and not auto_play and shot_mode == "" and is_inside_tree() and hud != null:
+			_pause_menu()
+
+func _set_lines() -> Array:
+	# 세트 진화표: [글, 색]
+	var out: Array = []
+	for id in MAINS:
+		var d: Dictionary = MAINS[id]
+		var pn: String = SUPPORTS[d["partner"]]["name"]
+		if evolved.has(id):
+			out.append(["%s 진화 완료!" % d["evo"], Color("#ffd23f")])
+		elif mains.has(id):
+			var have := supports.has(d["partner"])
+			out.append(["%s Lv.%d/5 + %s %s" % [d["name"], mains[id], pn, "(있어요)" if have else "(필요)"], Color("#6ee0b0") if have else Color.WHITE])
+		else:
+			out.append(["%s + %s = %s" % [d["name"], pn, d["evo"]], Color(1, 1, 1, 0.5)])
+	return out
+
 func _pause_menu() -> void:
 	if paused or game_over:
 		return
@@ -2617,15 +2757,40 @@ func _pause_menu() -> void:
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.offset_left = -300
 	t.offset_right = 300
-	t.offset_top = -260
-	t.offset_bottom = -180
+	t.offset_top = -500
+	t.offset_bottom = -420
+	var sl := _label("세트 진화표", 36, Color("#ffdf3d"), card_panel, 9)
+	sl.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sl.offset_left = -330
+	sl.offset_right = 330
+	sl.offset_top = -400
+	sl.offset_bottom = -350
+	var lines := _set_lines()
+	for i in lines.size():
+		var ll := _label(lines[i][0], 28, lines[i][1], card_panel, 8)
+		ll.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		ll.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ll.offset_left = -340
+		ll.offset_right = 340
+		ll.offset_top = -340 + i * 48
+		ll.offset_bottom = -300 + i * 48
 	var go := _small_btn("계속하기", Color("#4fa8e8"), 44)
 	go.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	go.offset_left = -170
 	go.offset_right = 170
-	go.offset_top = -120
-	go.offset_bottom = -20
+	go.offset_top = -100
+	go.offset_bottom = 0
 	card_panel.add_child(go)
+	_arm(go, 0.3)
+	var stb := _small_btn("설정", Color("#8a7a95"), 36)
+	stb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	stb.offset_left = -170
+	stb.offset_right = 170
+	stb.offset_top = 30
+	stb.offset_bottom = 120
+	card_panel.add_child(stb)
+	stb.pressed.connect(_open_settings)
 	go.pressed.connect(func():
 		card_panel.queue_free()
 		card_panel = null
@@ -2634,14 +2799,69 @@ func _pause_menu() -> void:
 	q.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	q.offset_left = -170
 	q.offset_right = 170
-	q.offset_top = 20
-	q.offset_bottom = 110
+	q.offset_top = 150
+	q.offset_bottom = 240
 	card_panel.add_child(q)
 	q.pressed.connect(func():
+		if not q.has_meta("armed"):
+			q.set_meta("armed", true)
+			q.text = "정말 나갈까요? 한 번 더!"
+			return
 		card_panel.queue_free()
 		card_panel = null
 		paused = false
 		_end_game(false))
+
+func _open_settings() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.1, 0.05, 0.15, 0.7)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(dim)
+	var box_p := Panel.new()
+	box_p.add_theme_stylebox_override("panel", _round_panel(Color("#fff8e8"), 36, Color("#8a7a95"), 10))
+	box_p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box_p.offset_left = -300
+	box_p.offset_right = 300
+	box_p.offset_top = -430
+	box_p.offset_bottom = 430
+	root.add_child(box_p)
+	var t := _label("설정", 56, Color("#3a2148"), box_p, 0)
+	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.offset_top = 30
+	var items := [["bgm", "배경음악"], ["sfx", "효과음"], ["vib", "진동"], ["shake", "화면 흔들림"], ["nums", "데미지 숫자"]]
+	for i in items.size():
+		var key: String = items[i][0]
+		var l := _label(items[i][1], 40, Color("#3a2148"), box_p, 0)
+		l.position = Vector2(50, 140 + i * 110)
+		var b := _small_btn("켜짐" if Save.opt(key) else "꺼짐", Color("#2fc79a") if Save.opt(key) else Color("#b9b0bf"), 34)
+		b.position = Vector2(370, 128 + i * 110)
+		b.size = Vector2(180, 80)
+		box_p.add_child(b)
+		b.pressed.connect(func():
+			var v := not Save.opt(key)
+			Save.set_opt(key, v)
+			b.text = "켜짐" if v else "꺼짐"
+			var st := _round_panel(Color("#2fc79a") if v else Color("#b9b0bf"), 26, Color("#3a2148"), 5)
+			b.add_theme_stylebox_override("normal", st)
+			b.add_theme_stylebox_override("hover", st)
+			if key == "bgm" and bgm:
+				bgm.volume_db = -9.0 if v else -80.0
+			_play("pick", 1.0, -3.0))
+	var close := _small_btn("닫기", Color("#4fa8e8"), 40)
+	close.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	close.offset_left = -150
+	close.offset_right = 150
+	close.offset_top = -130
+	close.offset_bottom = -40
+	box_p.add_child(close)
+	close.pressed.connect(layer.queue_free)
 
 func _refresh_slots() -> void:
 	for c in slot_box.get_children():
@@ -2785,6 +3005,7 @@ func _level_up() -> void:
 
 func _show_cards(pick: Array) -> void:
 	var is_evo: bool = pick[0]["type"] == "evo"
+	var first_card := not Save.tut_seen("card") and shot_mode == ""
 	card_panel = Control.new()
 	card_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ui.add_child(card_panel)
@@ -2809,11 +3030,20 @@ func _show_cards(pick: Array) -> void:
 	for i in pick.size():
 		var b := _make_card(pick[i])
 		vb.add_child(b)
+		_arm(b)
 		b.scale = Vector2(0.6, 0.6)
 		b.pivot_offset = Vector2(300, 105)
 		var tw := create_tween()
 		tw.tween_interval(0.08 * i)
 		tw.tween_property(b, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if first_card:
+		Save.tut_mark("card")
+		var hint := _label("같은 장난감을 Lv.5까지 키우고\n세트 짝꿍 보조를 모으면 진화해요!", 34, Color.WHITE, card_panel, 10)
+		hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.offset_left = -340
+		hint.offset_right = 340
+		hint.offset_top = 290
 	if rerolls > 0 and not is_evo:
 		var rb := _small_btn("다시 뽑기 (%d)" % rerolls, Color("#58c6f2"))
 		rb.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
@@ -2822,12 +3052,22 @@ func _show_cards(pick: Array) -> void:
 		rb.offset_top = -190
 		rb.offset_bottom = -100
 		card_panel.add_child(rb)
+		_arm(rb)
 		rb.pressed.connect(func():
 			rerolls -= 1
 			card_panel.queue_free()
 			card_panel = null
 			_play("pick", 0.8, -3.0)
 			_show_cards(_card_pool()))
+
+func _arm(b: Control, delay := 0.5) -> void:
+	# 손가락이 화면에 닿아 있던 채로 버튼이 눌리지 않게 잠깐 막아요
+	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.modulate.a = 0.75
+	get_tree().create_timer(delay).timeout.connect(func():
+		if is_instance_valid(b):
+			b.mouse_filter = Control.MOUSE_FILTER_STOP
+			b.modulate.a = 1.0)
 
 func _small_btn(text: String, col: Color, fs := 36) -> Button:
 	var b := Button.new()
@@ -3022,6 +3262,7 @@ func _reward_panel(title_t: String, got: Array, cc: int, extra: Array) -> void:
 	ok.custom_minimum_size = Vector2(300, 100)
 	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vb.add_child(ok)
+	_arm(ok, 0.6)
 	ok.pressed.connect(func():
 		card_panel.queue_free()
 		card_panel = null
@@ -3096,6 +3337,10 @@ func _end_game(win: bool) -> void:
 		evo_names.append(MAINS[id]["evo"])
 	var lines := "버틴 시간  %d:%02d\n물리친 귀신  %d마리\n레벨  %d\n진화  %s\n\n동전 +%d%s" % [int(elapsed) / 60, int(elapsed) % 60, kills, level,
 		", ".join(evo_names) if evo_names.size() > 0 else "아직 없어요", run_coins, ("  (보너스 %d 포함)" % bonus) if bonus > 0 else ""]
+	if not auto_play and shot_mode == "":
+		var af := Save.affordable()
+		if af.size() > 0:
+			lines += "\n\n문방구에서 '%s' 살 수 있어요!" % af[0]["name"]
 	if weekly:
 		lines += "\n\n주간 도전 점수 %d (이번 주 최고 %d)" % [result["score"], Save.weekly_best()]
 	for n in rec["news"]:
@@ -3248,8 +3493,21 @@ func _make_sounds() -> void:
 		add_child(p)
 		players_audio.append(p)
 
+func _play_bgm(track: String) -> void:
+	if auto_play or not ResourceLoader.exists("res://music/%s.ogg" % track):
+		return
+	var st: AudioStreamOggVorbis = load("res://music/%s.ogg" % track)
+	st.loop = true
+	bgm.stream = st
+	bgm.volume_db = -9.0 if Save.opt("bgm") else -80.0
+	bgm.play()
+
+func _vib(ms: int) -> void:
+	if Save.opt("vib"):
+		Input.vibrate_handheld(ms)
+
 func _play(name: String, pitch := 1.0, db := 0.0) -> void:
-	if not sounds.has(name):
+	if not sounds.has(name) or not Save.opt("sfx"):
 		return
 	var p: AudioStreamPlayer = players_audio[audio_i]
 	audio_i = (audio_i + 1) % players_audio.size()
@@ -3311,6 +3569,27 @@ func _setup_shot() -> void:
 		_refresh_slots()
 	if shot_mode == "cards" or shot_mode == "evocard":
 		_level_up()
+	if shot_mode == "pause":
+		mains["ddakji"] = 3
+		main_order.append("ddakji")
+		supports["notebook"] = 1
+		support_order.append("notebook")
+		_refresh_slots()
+		call_deferred("_pause_menu")
+	if shot_mode == "settings":
+		call_deferred("_open_settings")
+	if shot_mode == "tut":
+		elapsed = 0.0
+		for e in enemies:
+			e["hp"] = 0.0
+		enemies.clear()
+		call_deferred("_make_move_tut")
+	if shot_mode == "ind":
+		enemies.clear()
+		var el := _make_enemy("kettle", Vector3(11, 0, -11), true)
+		el["speed"] = 0.0
+		_drop("gacha", Vector3(-10, 0, 9))
+		_drop("chest", Vector3(9, 0, 9))
 	if shot_mode == "end":
 		kills = 1234
 		elapsed = 187.0

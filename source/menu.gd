@@ -137,6 +137,20 @@ func _right_btn(row: Panel, text: String, col: Color, enabled: bool, cb: Callabl
 # ---------- 홈 ----------
 func _home() -> void:
 	_coins(root)
+	var sb := B("설정", Color("#8a7a95"), 30)
+	sb.position = Vector2(24, 24)
+	sb.size = Vector2(130, 72)
+	root.add_child(sb)
+	sb.pressed.connect(main._open_settings)
+	if OS.has_feature("web") and not _standalone():
+		var ib := B("앱처럼 설치하기", Color("#2fc79a"), 26)
+		ib.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+		ib.offset_left = -150
+		ib.offset_right = 150
+		ib.offset_top = 290
+		ib.offset_bottom = 352
+		root.add_child(ib)
+		ib.pressed.connect(_install_help)
 	var t := L("문방구 퇴마단", 96, Color("#ffdf3d"), root, 18)
 	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -180,8 +194,8 @@ func _home() -> void:
 	hb.add_theme_constant_override("separation", 14)
 	hb.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(hb)
-	var items := [["문방구", "shop", Color("#4fa8e8"), 0], ["친구들", "friends", Color("#ff7aa8"), 0],
-		["도장 숙제", "ach", Color("#2fc79a"), Save.ach_claimable() + Save.daily_claimable()], ["귀신 도감", "book", Color("#9b8cff"), 0]]
+	var items := [["문방구", "shop", Color("#4fa8e8"), Save.affordable().size()], ["친구들", "friends", Color("#ff7aa8"), 0],
+		["도장 숙제", "ach", Color("#2fc79a"), Save.ach_claimable() + Save.daily_claimable()], ["도감", "book", Color("#9b8cff"), 0]]
 	for it in items:
 		var b := B(it[0], it[2], 30)
 		b.custom_minimum_size = Vector2(160, 120)
@@ -191,6 +205,45 @@ func _home() -> void:
 		b.pressed.connect(func():
 			main._play("pick", 1.0, -4.0)
 			show_screen(dest))
+
+func _standalone() -> bool:
+	if not OS.has_feature("web"):
+		return true
+	var r = JavaScriptBridge.eval("(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true", true)
+	return r == true
+
+func _install_help() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0.1, 0.05, 0.15, 0.7)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+	var box_p := Panel.new()
+	box_p.add_theme_stylebox_override("panel", main._round_panel(CREAM, 36, Color("#2fc79a"), 10))
+	box_p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box_p.offset_left = -310
+	box_p.offset_right = 310
+	box_p.offset_top = -380
+	box_p.offset_bottom = 380
+	layer.add_child(box_p)
+	var t := L("홈 화면에 설치하기", 50, INK, box_p)
+	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.offset_top = 34
+	var body := L("주소창 없이 꽉 찬 화면으로,\n다음부터 아이콘 한 번에 바로 시작해요.\n\n[아이폰 사파리]\n아래쪽 공유 버튼을 누르고\n'홈 화면에 추가'\n\n[안드로이드 크롬]\n오른쪽 위 점 세 개 메뉴에서\n'홈 화면에 추가' 또는 '앱 설치'", 30, SUB, box_p)
+	body.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.offset_top = 120
+	var ok := B("알겠어요", Color("#2fc79a"), 40)
+	ok.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	ok.offset_left = -150
+	ok.offset_right = 150
+	ok.offset_top = -130
+	ok.offset_bottom = -40
+	box_p.add_child(ok)
+	ok.pressed.connect(layer.queue_free)
 
 # ---------- 놀러 가기 ----------
 func _stage() -> void:
@@ -394,11 +447,25 @@ func _ach() -> void:
 
 # ---------- 귀신 도감 ----------
 func _book() -> void:
-	var vb := _page("귀신 도감")
+	var vb := _page("도감")
 	var total := 0
 	for k in Save.BESTIARY:
 		if int(Save.data["bestiary"].get(k, 0)) > 0:
 			total += 1
+	var sh := L("세트 진화표", 36, Color.WHITE, vb, 9)
+	sh.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var md: Dictionary = main.mains_def()
+	var sd: Dictionary = main.supports_def()
+	for id in md:
+		var d: Dictionary = md[id]
+		var row := _row(vb, 150, Color(d["col"]))
+		main._badge(row, d["icon"], Color(d["col"]), 100, Vector2(22, 25))
+		var nm := L("%s Lv.5 + %s" % [d["name"], sd[d["partner"]]["name"]], 34, INK, row)
+		nm.position = Vector2(140, 16)
+		var ev := L("= " + d["evo"], 32, Color("#d08a00"), row)
+		ev.position = Vector2(140, 62)
+		var ds := L(d["evo_desc"], 22, SUB, row)
+		ds.position = Vector2(140, 108)
 	var tip := L("만난 귀신 %d / %d" % [total, Save.BESTIARY.size()], 30, Color.WHITE, vb, 8)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	for k in Save.BESTIARY:
