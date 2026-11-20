@@ -53,7 +53,9 @@ func L(text: String, size: int, col: Color, parent: Node, outline := 0) -> Label
 	return main._label(text, size, col, parent, outline)
 
 func B(text: String, col: Color, fs := 36) -> Button:
-	return main._small_btn(text, col, fs)
+	var b: Button = main._small_btn(text, col, fs)
+	b.mouse_filter = Control.MOUSE_FILTER_PASS
+	return b
 
 func _coins(parent: Control) -> void:
 	var c := L("동전 %d" % int(Save.data["coins"]), 40, Color("#ffd23f"), parent, 10)
@@ -103,6 +105,7 @@ func _page(title: String) -> VBoxContainer:
 	sc.offset_top = 200
 	sc.offset_bottom = -30
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.scroll_deadzone = 12
 	sc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	root.add_child(sc)
 	var vb := VBoxContainer.new()
@@ -119,6 +122,7 @@ func _row(parent: Control, h: float, border: Color, bg := CREAM) -> Panel:
 	p.custom_minimum_size = Vector2(0, h)
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	p.add_theme_stylebox_override("panel", main._round_panel(bg, 26, border, 7))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	parent.add_child(p)
 	return p
 
@@ -256,26 +260,6 @@ func _stage() -> void:
 	ml.position = Vector2(28, 14)
 	var mdl := L(md["desc"], 26, SUB, mrow)
 	mdl.position = Vector2(28, 74)
-	# 주간 도전
-	var wc := Save.weekly_cfg()
-	var wrow := _row(vb, 250, Color("#ffc928"), Color("#fff1b8"))
-	var wl := L("이번 주 도전", 44, INK, wrow)
-	wl.position = Vector2(28, 16)
-	var wd := L("%s 2학년, %s 빌려서, %s\n모두 같은 조건! 점수를 단톡방에 자랑해요" % [Save.STAGES[wc["stage"]]["name"], Save.CHARS[wc["char"]]["name"], Save.DAY_MODS[wc["mod"]]["name"]], 26, SUB, wrow)
-	wd.position = Vector2(28, 76)
-	var wb := L("이번 주 최고 점수 %d" % Save.weekly_best(), 28, Color("#d08a00"), wrow)
-	wb.position = Vector2(28, 160)
-	var wgo := B("도전!", Color("#e8524a"), 40)
-	wgo.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	wgo.offset_left = -210
-	wgo.offset_right = -24
-	wgo.offset_top = -100
-	wgo.offset_bottom = -20
-	wrow.add_child(wgo)
-	wgo.pressed.connect(func():
-		Save.run_cfg = {"stage": wc["stage"], "grade": wc["grade"], "weekly": true}
-		Save.mode = "run"
-		get_tree().reload_current_scene())
 	for sid in Save.STAGE_ORDER:
 		var s: Dictionary = Save.STAGES[sid]
 		var open := Save.stage_unlocked(sid)
@@ -327,6 +311,32 @@ func _stage() -> void:
 			Save.run_cfg = {"stage": sid2, "grade": sel[sid2]}
 			Save.mode = "run"
 			get_tree().reload_current_scene())
+
+	# 주간 도전 (운동장을 한 번 깨야 열려요)
+	if not Save.stage_unlocked("hall"):
+		var lrow := _row(vb, 120, Color("#c9bfd3"), Color("#e9e2ee"))
+		var ll := L("이번 주 도전 (운동장 보스를 물리치면 열려요)", 30, Color("#8a7a95"), lrow)
+		ll.position = Vector2(28, 40)
+		return
+	var wc := Save.weekly_cfg()
+	var wrow := _row(vb, 250, Color("#ffc928"), Color("#fff1b8"))
+	var wl := L("이번 주 도전 (특별 규칙)", 40, INK, wrow)
+	wl.position = Vector2(28, 16)
+	var wd := L("%s 2학년, %s를 빌려서, %s\n모두 같은 조건! 점수를 단톡방에 자랑해요" % [Save.STAGES[wc["stage"]]["name"], Save.CHARS[wc["char"]]["name"], Save.DAY_MODS[wc["mod"]]["name"]], 26, SUB, wrow)
+	wd.position = Vector2(28, 76)
+	var wb := L("이번 주 최고 점수 %d" % Save.weekly_best(), 28, Color("#d08a00"), wrow)
+	wb.position = Vector2(28, 160)
+	var wgo := B("도전!", Color("#e8524a"), 40)
+	wgo.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	wgo.offset_left = -210
+	wgo.offset_right = -24
+	wgo.offset_top = -100
+	wgo.offset_bottom = -20
+	wrow.add_child(wgo)
+	wgo.pressed.connect(func():
+		Save.run_cfg = {"stage": wc["stage"], "grade": wc["grade"], "weekly": true}
+		Save.mode = "run"
+		get_tree().reload_current_scene())
 
 # ---------- 문방구 ----------
 func _shop() -> void:

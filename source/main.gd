@@ -2457,7 +2457,7 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 		return
 	nohit_t = 0.0
 	hp -= amount
-	hurt_timer = 1.1
+	hurt_timer = 2.0
 	shake = 0.35
 	hitstop(0.08)
 	_play("hurt", 1.0, -3.0)
@@ -3024,7 +3024,7 @@ func _update_hud() -> void:
 			boss_bar.size = Vector2(508, 22)
 			boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			boss_bar_bg.add_child(boss_bar)
-			var bl := _label("분실물함 대왕귀신", 26, Color.WHITE, boss_bar_bg, 7)
+			var bl := _label(Save.STAGES[stage]["boss"], 26, Color.WHITE, boss_bar_bg, 7)
 			bl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

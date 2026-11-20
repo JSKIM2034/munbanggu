@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://cvki8wo0ia3i6"
+path="res://.godot/imported/sunja_Baked.jpg-079035f825469f408756e812e7a5da13.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "e404a91b07e45969395393c1dd806ee7"
+}
+
+[deps]
+
+source_file="res://models/sunja_Baked.jpg"
+dest_files=["res://.godot/imported/sunja_Baked.jpg-079035f825469f408756e812e7a5da13.ctex"]
+
+[params]
+
+compress/mode=1
+compress/high_quality=false
+compress/lossy_quality=0.85
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=0

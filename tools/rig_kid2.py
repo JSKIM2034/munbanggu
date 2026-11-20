@@ -14,13 +14,10 @@ for o in list(bpy.data.objects):
     if o != mesh: bpy.data.objects.remove(o)
 bpy.context.view_layer.objects.active = mesh; mesh.select_set(True)
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-# UV 경계마다 끊어진 꼭짓점을 붙여요 (안 붙이면 줄일 때 틈이 벌어져 금처럼 보여요)
-bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT")
-bpy.ops.mesh.remove_doubles(threshold=0.00001); bpy.ops.object.mode_set(mode="OBJECT")
-# 면 수 줄이기 (모바일용)
-md = mesh.modifiers.new("dec", "DECIMATE"); md.ratio = target / len(mesh.data.polygons)
-bpy.ops.object.modifier_apply(modifier="dec")
-for p in mesh.data.polygons: p.use_smooth = True
+# 줄이고 새 UV에 원본 색을 구워요 (얼굴이 깨지지 않게)
+import bake_util
+TEX = int(C.get("tex", 2048))
+mesh, baked = bake_util.decimate_and_bake(mesh, target, TEX)
 print("FACES", len(mesh.data.polygons))
 
 co = np.array([v.co[:] for v in mesh.data.vertices])
@@ -93,17 +90,6 @@ for v in mesh.data.vertices:
         if x / tot > 0.01: vg[k].add([v.index], x / tot, "REPLACE")
 mesh.parent = rig; mod = mesh.modifiers.new("Armature", "ARMATURE"); mod.object = rig
 mesh.name = "Body"
-# 텍스처: 색만 1024
-mat = mesh.data.materials[0]; nt = mat.node_tree
-bsdf = [n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"][0]; base = None
-for l in list(nt.links):
-    if l.to_node == bsdf and l.to_socket.name == "Base Color": base = l.from_node.image
-    elif l.to_node == bsdf or l.to_node.type in ("NORMAL_MAP", "SEPARATE_COLOR"): nt.links.remove(l)
-for n in list(nt.nodes):
-    if (n.type == "TEX_IMAGE" and n.image != base) or n.type in ("NORMAL_MAP", "SEPARATE_COLOR"): nt.nodes.remove(n)
-bsdf.inputs["Metallic"].default_value = 0.0; bsdf.inputs["Roughness"].default_value = 0.8
-base.scale(1024, 1024)
-import tex_bleed; tex_bleed.bleed(base, mesh)
 bpy.ops.object.select_all(action="DESELECT"); rig.select_set(True); mesh.select_set(True)
 bpy.ops.export_scene.gltf(filepath=dst, export_format="GLB", use_selection=True, export_skins=True,
                           export_animations=False, export_image_format="JPEG", export_jpeg_quality=88)
