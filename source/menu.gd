@@ -1,0 +1,390 @@
+extends CanvasLayer
+# 메인 메뉴: 홈, 놀러 가기(장소,학년), 문방구(영구 강화), 친구들, 도장 숙제, 귀신 도감
+
+var main: Node3D
+var root: Control
+var screen := "home"
+var sel := {}        # 장소 -> 고른 학년
+var scroll_y := {}   # 화면별 스크롤 위치 기억
+
+const CREAM := Color("#fff8e8")
+const INK := Color("#3a2148")
+const SUB := Color("#6b5a75")
+
+func _ready() -> void:
+	layer = 5
+	var first := "home"
+	for a in OS.get_cmdline_user_args():
+		if a == "--rich":
+			# 스크린샷용 가짜 진행도 (저장하지 않아요)
+			Save.data["coins"] = 480
+			Save.data["clears"] = {"ground": 2}
+			Save.data["stats"] = {"total_kills": 650, "best_combo": 120, "elite_kills": 6}
+			Save.data["shop"] = {"dmg": 2, "hp": 1}
+			Save.data["bestiary"] = {"paper": 420, "egg": 180, "kettle": 30, "eraser": 20}
+			Save.data["daily"]["prog"] = {Save.data["daily"]["ids"][0]: 9999}
+		if a.begins_with("--mscreen="):
+			first = a.substr(10)
+	for s in Save.STAGE_ORDER:
+		sel[s] = Save.max_grade(s)
+	show_screen(first)
+
+func show_screen(name: String) -> void:
+	if root:
+		var sc := root.find_child("Scroll", true, false)
+		if sc:
+			scroll_y[screen] = (sc as ScrollContainer).scroll_vertical
+		root.queue_free()
+	screen = name
+	root = Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(root)
+	match name:
+		"home": _home()
+		"stage": _stage()
+		"shop": _shop()
+		"friends": _friends()
+		"ach": _ach()
+		"book": _book()
+
+# ---------- 작은 도구 ----------
+func L(text: String, size: int, col: Color, parent: Node, outline := 0) -> Label:
+	return main._label(text, size, col, parent, outline)
+
+func B(text: String, col: Color, fs := 36) -> Button:
+	return main._small_btn(text, col, fs)
+
+func _coins(parent: Control) -> void:
+	var c := L("동전 %d" % int(Save.data["coins"]), 40, Color("#ffd23f"), parent, 10)
+	c.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	c.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	c.offset_left = -360
+	c.offset_right = -28
+	c.offset_top = 30
+
+func _dot(parent: Control, n: int) -> void:
+	if n <= 0:
+		return
+	var d := Panel.new()
+	d.add_theme_stylebox_override("panel", main._round_panel(Color("#ff4f4f"), 22, Color.WHITE, 4))
+	d.size = Vector2(44, 44)
+	d.position = Vector2(parent.custom_minimum_size.x - 34, -10)
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(d)
+	var l := L(str(n), 26, Color.WHITE, d, 0)
+	l.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+func _page(title: String) -> VBoxContainer:
+	# 공통 화면 틀: 크림색 판, 제목, 뒤로, 동전, 스크롤 목록
+	var dim := ColorRect.new()
+	dim.color = Color(0.12, 0.07, 0.18, 0.45)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(dim)
+	var back := B("< 뒤로", Color("#8a7a95"), 32)
+	back.position = Vector2(24, 24)
+	back.size = Vector2(170, 76)
+	root.add_child(back)
+	back.pressed.connect(func():
+		main._play("pick", 0.8, -4.0)
+		show_screen("home"))
+	_coins(root)
+	var t := L(title, 60, Color.WHITE, root, 12)
+	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.offset_top = 112
+	var sc := ScrollContainer.new()
+	sc.name = "Scroll"
+	sc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sc.offset_left = 30
+	sc.offset_right = -30
+	sc.offset_top = 200
+	sc.offset_bottom = -30
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	root.add_child(sc)
+	var vb := VBoxContainer.new()
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_theme_constant_override("separation", 18)
+	sc.add_child(vb)
+	if scroll_y.has(screen):
+		var y: int = scroll_y[screen]
+		get_tree().create_timer(0.02).timeout.connect(func(): if is_instance_valid(sc): sc.scroll_vertical = y)
+	return vb
+
+func _row(parent: Control, h: float, border: Color, bg := CREAM) -> Panel:
+	var p := Panel.new()
+	p.custom_minimum_size = Vector2(0, h)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.add_theme_stylebox_override("panel", main._round_panel(bg, 26, border, 7))
+	parent.add_child(p)
+	return p
+
+func _right_btn(row: Panel, text: String, col: Color, enabled: bool, cb: Callable, w := 190.0) -> Button:
+	var b := B(text, col, 30)
+	b.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+	b.offset_left = -w - 22
+	b.offset_right = -22
+	b.offset_top = -40
+	b.offset_bottom = 40
+	b.disabled = not enabled
+	row.add_child(b)
+	b.pressed.connect(cb)
+	return b
+
+# ---------- 홈 ----------
+func _home() -> void:
+	_coins(root)
+	var t := L("문방구 퇴마단", 96, Color("#ffdf3d"), root, 18)
+	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.offset_top = 110
+	t.pivot_offset = Vector2(360, 60)
+	var tw := t.create_tween().set_loops()
+	tw.tween_property(t, "rotation", 0.03, 1.2).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(t, "rotation", -0.03, 1.2).set_trans(Tween.TRANS_SINE)
+	var st := L("학교 귀신, 장난감으로 물리쳐라!", 34, Color.WHITE, root, 10)
+	st.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	st.offset_top = 230
+	var ch: Dictionary = Save.CHARS[Save.data["char"]]
+	var who := L("%s - 시작 무기 %s" % [ch["name"], main.mains_def()[ch["weapon"]]["name"]], 32, Color.WHITE, root, 10)
+	who.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	who.offset_left = -300
+	who.offset_right = 300
+	who.offset_top = -420
+	who.offset_bottom = -370
+	var go := B("놀러 가기!", Color("#ff9a2f"), 56)
+	go.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	go.offset_left = -280
+	go.offset_right = 280
+	go.offset_top = -355
+	go.offset_bottom = -225
+	go.pivot_offset = Vector2(280, 65)
+	root.add_child(go)
+	var gt := go.create_tween().set_loops()
+	gt.tween_property(go, "scale", Vector2(1.04, 1.04), 0.6).set_trans(Tween.TRANS_SINE)
+	gt.tween_property(go, "scale", Vector2.ONE, 0.6).set_trans(Tween.TRANS_SINE)
+	go.pressed.connect(func():
+		main._play("pick", 1.0, -3.0)
+		show_screen("stage"))
+	var hb := HBoxContainer.new()
+	hb.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	hb.offset_left = -340
+	hb.offset_right = 340
+	hb.offset_top = -195
+	hb.offset_bottom = -60
+	hb.add_theme_constant_override("separation", 14)
+	hb.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_child(hb)
+	var items := [["문방구", "shop", Color("#4fa8e8"), 0], ["친구들", "friends", Color("#ff7aa8"), 0],
+		["도장 숙제", "ach", Color("#2fc79a"), Save.ach_claimable() + Save.daily_claimable()], ["귀신 도감", "book", Color("#9b8cff"), 0]]
+	for it in items:
+		var b := B(it[0], it[2], 30)
+		b.custom_minimum_size = Vector2(160, 120)
+		hb.add_child(b)
+		_dot(b, it[3])
+		var dest: String = it[1]
+		b.pressed.connect(func():
+			main._play("pick", 1.0, -4.0)
+			show_screen(dest))
+
+# ---------- 놀러 가기 ----------
+func _stage() -> void:
+	var vb := _page("어디로 갈까?")
+	for sid in Save.STAGE_ORDER:
+		var s: Dictionary = Save.STAGES[sid]
+		var open := Save.stage_unlocked(sid)
+		var row := _row(vb, 400, Color(s["col"]) if open else Color("#9b8aa5"), CREAM if open else Color("#e9e2ee"))
+		var nm := L(s["name"] if open else s["name"] + "  (잠김)", 50, INK, row)
+		nm.position = Vector2(30, 22)
+		var ds := L(s["desc"], 28, SUB, row)
+		ds.position = Vector2(30, 90)
+		ds.size = Vector2(600, 40)
+		var bl := L("보스: " + s["boss"], 26, Color("#c0506a"), row)
+		bl.position = Vector2(30, 134)
+		if not open:
+			var need: String = s["need"]
+			var lk := L("%s 보스를 물리치면 열려요" % Save.STAGES[need]["name"], 32, Color("#8a7a95"), row)
+			lk.position = Vector2(30, 220)
+			continue
+		var mg := Save.max_grade(sid)
+		var gl := L("학년", 30, INK, row)
+		gl.position = Vector2(30, 196)
+		for g in range(1, Save.MAX_GRADE + 1):
+			var gb := B(str(g), Color("#ffb03f") if g == sel[sid] else Color("#c9bfd3"), 34)
+			gb.position = Vector2(110 + (g - 1) * 84, 182)
+			gb.size = Vector2(72, 72)
+			gb.disabled = g > mg
+			row.add_child(gb)
+			var gg := g
+			var ss: String = sid
+			gb.pressed.connect(func():
+				sel[ss] = gg
+				main._play("pick", 1.0 + gg * 0.05, -5.0)
+				show_screen("stage"))
+		var bk: String = "%s_%d" % [sid, sel[sid]]
+		var best: Dictionary = Save.data["best"].get(bk, {})
+		var rec := "아직 기록이 없어요"
+		if not best.is_empty():
+			rec = ("클리어 %d:%02d" if best.get("win", false) else "최고 %d:%02d 버팀") % [int(best["time"]) / 60, int(best["time"]) % 60]
+		var hint := "  |  귀신 체력 x%.2f  동전 x%.2f" % [1.0 + 0.45 * (sel[sid] - 1), 1.0 + 0.35 * (sel[sid] - 1)]
+		var rl := L(rec + hint, 24, SUB, row)
+		rl.position = Vector2(30, 268)
+		var go := B("출발!", Color("#ff9a2f"), 40)
+		go.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+		go.offset_left = -230
+		go.offset_right = -24
+		go.offset_top = -100
+		go.offset_bottom = -20
+		row.add_child(go)
+		var sid2: String = sid
+		go.pressed.connect(func():
+			Save.run_cfg = {"stage": sid2, "grade": sel[sid2]}
+			Save.mode = "run"
+			get_tree().reload_current_scene())
+
+# ---------- 문방구 ----------
+func _shop() -> void:
+	var vb := _page("문방구 진열대")
+	var tip := L("판에서 모은 동전으로 영원히 강해져요", 28, Color.WHITE, vb, 8)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	for it in Save.SHOP:
+		var id: String = it["id"]
+		var lvl := Save.shop_lv(id)
+		var mx: int = it["cost"].size()
+		var row := _row(vb, 170, Color(it["col"]))
+		main._badge(row, it["icon"], Color(it["col"]), 110, Vector2(22, 30))
+		var nm := L(it["name"], 40, INK, row)
+		nm.position = Vector2(150, 22)
+		var pips := ""
+		for i in mx:
+			pips += "★" if i < lvl else "☆"
+		var lv := L(pips, 30, Color("#ffb03f"), row)
+		lv.position = Vector2(150 + nm.get_minimum_size().x + 16, 30)
+		var ds := L(it["desc"], 28, SUB, row)
+		ds.position = Vector2(150, 92)
+		var cost := Save.shop_cost(id)
+		if cost < 0:
+			_right_btn(row, "다 샀어요", Color("#b9b0bf"), false, func(): pass)
+		else:
+			var buy_cb := func():
+				if Save.buy(id):
+					main._play("coin", 1.0, -2.0)
+					main._play("level", 1.2, -6.0)
+					show_screen("shop")
+			_right_btn(row, "동전 %d" % cost, Color("#ffb03f"), int(Save.data["coins"]) >= cost, buy_cb)
+
+# ---------- 친구들 ----------
+func _friends() -> void:
+	var vb := _page("퇴마단 친구들")
+	var tip := L("친구마다 시작 무기와 특기가 달라요", 28, Color.WHITE, vb, 8)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	for cid in Save.CHAR_ORDER:
+		var c: Dictionary = Save.CHARS[cid]
+		var open := Save.char_unlocked(cid)
+		var row := _row(vb, 200, Color(c["col"]) if open else Color("#9b8aa5"), CREAM if open else Color("#e9e2ee"))
+		main._badge(row, c["icon"] if open else "?", Color(c["col"]) if open else Color("#9b8aa5"), 130, Vector2(22, 34))
+		var nm := L(c["name"], 46, INK, row)
+		nm.position = Vector2(175, 22)
+		var wp := L("시작 무기: " + main.mains_def()[c["weapon"]]["name"], 28, SUB, row)
+		wp.position = Vector2(175, 86)
+		var pk := L("특기: " + c["perk"], 28, Color("#d08a00"), row)
+		pk.position = Vector2(175, 128)
+		if not open:
+			var a: Dictionary = Save.ach_by_id(c["unlock"])
+			var lk := L("도장 '%s'\n받으면 와요" % a["name"], 24, Color("#8a7a95"), row)
+			lk.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+			lk.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			lk.offset_left = -250
+			lk.offset_right = -24
+			lk.offset_top = -36
+			lk.offset_bottom = 36
+		elif Save.data["char"] == cid:
+			_right_btn(row, "함께해요", Color("#2fc79a"), false, func(): pass, 170)
+		else:
+			var ccid: String = cid
+			var pick_cb := func():
+				Save.data["char"] = ccid
+				Save.save_data()
+				main.char_id = ccid
+				main.mains = {Save.CHARS[ccid]["weapon"]: 1}
+				main._play("pick", 1.2, -3.0)
+				show_screen("friends")
+			_right_btn(row, "고르기", Color("#4fa8e8"), true, pick_cb, 170)
+
+# ---------- 도장 숙제 ----------
+func _ach() -> void:
+	var vb := _page("도장 숙제")
+	var h1 := L("오늘의 숙제 (매일 바뀌어요)", 36, Color.WHITE, vb, 9)
+	for qid in Save.data["daily"]["ids"]:
+		var q := Save.daily_quest(qid)
+		var prog := mini(int(Save.data["daily"]["prog"].get(qid, 0)), int(q["goal"]))
+		var row := _row(vb, 130, Color("#2fc79a"))
+		var nm := L(q["desc"], 34, INK, row)
+		nm.position = Vector2(28, 18)
+		var pl := L("%d / %d   |  동전 %d" % [prog, int(q["goal"]), Save.DAILY_REWARD], 26, SUB, row)
+		pl.position = Vector2(28, 74)
+		var claimed: bool = Save.data["daily"]["claimed"].has(qid)
+		var q2: String = qid
+		var qcb := func():
+			Save.claim_daily(q2)
+			main._play("coin", 1.0, -2.0)
+			show_screen("ach")
+		_right_btn(row, "받았어요" if claimed else "받기", Color("#2fc79a"), Save.daily_done(qid) and not claimed, qcb, 160)
+	var brow := _row(vb, 110, Color("#ffb03f"))
+	var bn := L("숙제 3개 다 하면 보너스 동전 %d" % Save.DAILY_BONUS, 30, INK, brow)
+	bn.position = Vector2(28, 34)
+	var bdone: bool = Save.data["daily"]["bonus"]
+	var bcb := func():
+		Save.claim_daily("bonus")
+		main._play("coin", 1.0, -2.0)
+		show_screen("ach")
+	_right_btn(brow, "받았어요" if bdone else "받기", Color("#ffb03f"), Save.data["daily"]["claimed"].size() >= 3 and not bdone, bcb, 160)
+	var h2 := L("도장 모으기", 36, Color.WHITE, vb, 9)
+	for a in Save.ACH:
+		var done := Save.ach_done(a)
+		var claimed: bool = Save.data["ach_claimed"].has(a["id"])
+		var row := _row(vb, 140, Color("#ff7aa8") if done else Color("#c9bfd3"), CREAM if done or claimed else Color("#f3eef6"))
+		var nm := L(("[도장] " if claimed else "") + a["name"], 36, INK, row)
+		nm.position = Vector2(28, 16)
+		var cur := mini(Save.stat(a["stat"]), int(a["goal"]))
+		var ds := L("%s  (%d/%d)  동전 %d" % [a["desc"], cur, int(a["goal"]), int(a["reward"])], 24, SUB, row)
+		ds.position = Vector2(28, 76)
+		ds.size = Vector2(450, 40)
+		ds.clip_text = true
+		var aid: String = a["id"]
+		var acb := func():
+			Save.claim_ach(aid)
+			main._play("coin", 1.0, -2.0)
+			main._play("level", 1.0, -6.0)
+			show_screen("ach")
+		_right_btn(row, "받았어요" if claimed else "받기", Color("#ff7aa8"), done and not claimed, acb, 160)
+
+# ---------- 귀신 도감 ----------
+func _book() -> void:
+	var vb := _page("귀신 도감")
+	var total := 0
+	for k in Save.BESTIARY:
+		if int(Save.data["bestiary"].get(k, 0)) > 0:
+			total += 1
+	var tip := L("만난 귀신 %d / %d" % [total, Save.BESTIARY.size()], 30, Color.WHITE, vb, 8)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	for k in Save.BESTIARY:
+		var b: Dictionary = Save.BESTIARY[k]
+		var n := int(Save.data["bestiary"].get(k, 0))
+		var seen := n > 0
+		var col := Color(main.kinds_def()[k]["col"])
+		var row := _row(vb, 170, col if seen else Color("#c9bfd3"), CREAM if seen else Color("#e9e2ee"))
+		main._badge(row, b["name"].substr(0, 1) if seen else "?", col if seen else Color("#9b8aa5"), 110, Vector2(22, 30))
+		var nm := L(b["name"] if seen else "???", 40, INK, row)
+		nm.position = Vector2(150, 18)
+		var cnt := L("%d마리 물리침" % n if seen else "아직 못 만났어요", 26, Color("#d08a00"), row)
+		cnt.position = Vector2(150, 72)
+		var ds := L(b["desc"] if seen else "", 24, SUB, row)
+		ds.position = Vector2(150, 110)
+		ds.size = Vector2(520, 50)
+		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
