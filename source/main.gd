@@ -272,6 +272,11 @@ func _ready() -> void:
 	font = load("res://fonts/Jua-Regular.ttf")
 	if OS.has_feature("web"):
 		get_viewport().scaling_3d_scale = 0.8
+		if OS.has_feature("web_android") or OS.has_feature("web_ios"):
+			# 폰에서는 열과 배터리를 아끼려고 40프레임으로, 화면도 조금 가볍게
+			Engine.max_fps = 40
+			get_viewport().scaling_3d_scale = 0.7
+			mobile_web = true
 	_make_materials()
 	_make_world()
 	_make_player()
@@ -639,6 +644,8 @@ func _make_world() -> void:
 		_: _world_ground()
 	_place_decor()
 	_apply_day_mod()
+	if mobile_web:
+		e_glow_off()
 
 # ---------- 배경 소품(3D 모델) ----------
 var decor_cache := {}
@@ -711,6 +718,11 @@ func _place_decor() -> void:
 			_decor("set_music", "p1", Vector3(AX + 0.3, 0, 2.0), -90.0, 1.5)
 			_decor("set_music", "p2", Vector3(-3.5, 0, 6.5), 0.0, 1.5, Vector2(0.35, 0.35))
 			_decor("set_music", "p3", Vector3(-AX - 0.2, 0, -2.0), 90.0, 1.2)
+
+func e_glow_off() -> void:
+	# 빛 번짐은 화면 전체를 한 번 더 그려서 폰을 뜨겁게 해요
+	if env_ref:
+		env_ref.glow_enabled = false
 
 func _apply_day_mod() -> void:
 	if day_mod == "vacation" and stage != "lab":
@@ -1333,6 +1345,8 @@ void fragment(){ float f = pow(clamp(dot(NORMAL, VIEW), 0.0, 1.0), 1.6); ALBEDO 
 """)
 	_mm("bglow", _sph(1.0, -1, 10, 5), 80, false)
 	(mm["bglow"].material_override as ShaderMaterial).shader = (mm["glow"].material_override as ShaderMaterial).shader
+	_mm("eglow", _sph(1.0, -1, 10, 5), 120, false)
+	(mm["eglow"].material_override as ShaderMaterial).shader = (mm["glow"].material_override as ShaderMaterial).shader
 	var tor := TorusMesh.new()
 	tor.inner_radius = 0.9
 	tor.outer_radius = 1.0
@@ -1638,7 +1652,7 @@ func _spawn_logic(dt: float) -> void:
 		if not ["boss", "relay", "pot", "ext"].has(kind) and elapsed >= kind_from(kind):
 			pool[kind] = {"paper": 5.0, "egg": 3.0, "kettle": 1.2, "eraser": 1.6, "dust": 1.0, "report": 1.3}[kind]
 	for i in count:
-		if enemies.size() >= MAX_ENEMY - 8:
+		if enemies.size() >= (MAX_ENEMY - 8 if not mobile_web else 80):
 			return
 		var p := _spawn_point()
 		var kind := _weighted(pool)
@@ -2110,19 +2124,24 @@ func _warn_mat(a: float) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(1, 0.2, 0.25, a)
+	m.albedo_color = Color(1, 0.12, 0.18, a)
+	m.emission_enabled = true
+	m.emission = Color(1, 0.1, 0.15)
+	m.emission_energy_multiplier = 0.6
+	m.render_priority = 2
+	m.no_depth_test = true
 	return m
 
 func _warn_circle(pos: Vector3, r: float, delay: float) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _cyl(1.0, 0.02, -1, 32)
-	mi.material_override = _warn_mat(0.35)
+	mi.material_override = _warn_mat(0.5)
 	mi.position = Vector3(pos.x, 0.04, pos.z)
 	mi.scale = Vector3(r, 1, r)
 	add_child(mi)
 	var inner := MeshInstance3D.new()
 	inner.mesh = _cyl(1.0, 0.03, -1, 32)
-	inner.material_override = _warn_mat(0.5)
+	inner.material_override = _warn_mat(0.7)
 	inner.scale = Vector3(0.01, 1, 0.01)
 	mi.add_child(inner)
 	warns.append({"node": mi, "inner": inner, "t": 0.0, "life": delay, "pos": pos, "r": r, "kind": "circle"})
@@ -2130,7 +2149,7 @@ func _warn_circle(pos: Vector3, r: float, delay: float) -> void:
 func _warn_line(pos: Vector3, dir: Vector3, life: float) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _box(Vector3(2.2, 0.02, 1.0))
-	mi.material_override = _warn_mat(0.35)
+	mi.material_override = _warn_mat(0.5)
 	add_child(mi)
 	var len := 12.0
 	mi.position = pos + dir * len / 2.0 + Vector3(0, 0.04, 0)
@@ -2176,10 +2195,14 @@ func _update_boss_attacks(dt: float) -> void:
 	var n := mini(eshots.size(), 120)
 	for i in n:
 		var b: Dictionary = eshots[i]
-		m.set_instance_transform(i, Transform3D(Basis(Vector3.UP, b["rot"]).scaled(Vector3.ONE * 1.6), b["pos"]))
+		m.set_instance_transform(i, Transform3D(Basis(Vector3.UP, b["rot"]).scaled(Vector3.ONE * 2.6), b["pos"]))
+		var bg2: MultiMesh = mm["eglow"].multimesh
+		bg2.set_instance_transform(i, Transform3D(Basis().scaled(Vector3.ONE * 0.55), b["pos"] + Vector3(0, 0.1, 0)))
+		bg2.set_instance_custom_data(i, Color(1.0, 0.25, 0.3, 0.75 + 0.25 * sin(elapsed * 20.0 + i)))
 		m.set_instance_color(i, Color.WHITE)
 		m.set_instance_custom_data(i, Color(1, 1, 1, 0))
 	m.visible_instance_count = n
+	mm["eglow"].multimesh.visible_instance_count = n
 
 # ---------- 떨어지는 아이템 ----------
 var drops: Array = []
@@ -3128,6 +3151,7 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 # 메인 루프
 # =========================================================
 var shot_frames := 0
+var mobile_web := false
 var part_cap := 220
 var low_fx := false
 var slow_t := 0.0
@@ -3165,13 +3189,15 @@ func _process(delta: float) -> void:
 			cam_off = cam.position - player.position
 			for e in enemies:
 				e["hp"] = 99999.0
+		if shot_mode == "boss" and shot_frames % 12 == 0:
+			get_viewport().get_texture().get_image().save_png("/tmp/bs_%03d.png" % shot_frames)
 		if shot_mode == "cpaper" and cpapers.size() > 0 and shot_frames % 3 == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/cp_%d.png" % shot_frames)
 		if shot_mode == "evocine" and shot_frames in [40, 60, 90, 185, 200]:
 			get_viewport().get_texture().get_image().save_png("/tmp/evc_%d.png" % shot_frames)
 		if shot_mode == "allw" and (shot_frames in [40, 55] or (shot_frames >= 14 and shot_frames <= 40 and bullets.size() > 0 and shot_frames % 2 == 0)):
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_allw_%d.png" % shot_frames)
-		if shot_frames == (34 if shot_mode == "boss" else (70 if shot_mode == "allw" else (32 if shot_mode == "kills" else (205 if shot_mode == "evocine" else 110)))) and perf_frames == 0:
+		if shot_frames == (150 if shot_mode == "boss" else (70 if shot_mode == "allw" else (32 if shot_mode == "kills" else (205 if shot_mode == "evocine" else 110)))) and perf_frames == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_%s.png" % shot_mode)
 			get_tree().quit()
 	if perf_frames > 0 and Engine.get_process_frames() % 60 == 0:
