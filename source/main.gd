@@ -295,6 +295,7 @@ func _ready() -> void:
 			gr.scale = Vector3.ONE * 1.25
 			gr.name = "Granny"
 			add_child(gr)
+		_decor("bg_shop", "", Vector3(0.4, 0, -3.6), 0.0, 1.0)
 		menu_node = load("res://menu.gd").new()
 		menu_node.set("main", self)
 		add_child(menu_node)
@@ -636,7 +637,80 @@ func _make_world() -> void:
 		"roof": _world_roof(e, sun)
 		"music": _world_music(e, sun)
 		_: _world_ground()
+	_place_decor()
 	_apply_day_mod()
+
+# ---------- 배경 소품(3D 모델) ----------
+var decor_cache := {}
+func _decor(file: String, piece: String, pos: Vector3, rot_deg := 0.0, scl := 1.0, block := Vector2.ZERO) -> Node3D:
+	var path := "res://models/%s.glb" % file
+	if not ResourceLoader.exists(path):
+		return null
+	if not decor_cache.has(file):
+		decor_cache[file] = (load(path) as PackedScene).instantiate()
+	var src: Node = decor_cache[file]
+	var n: Node3D = src if piece == "" else src.find_child(piece, true, false)
+	if n == null:
+		return null
+	var d: Node3D = n.duplicate()
+	d.position = pos
+	d.rotation = Vector3(0, deg_to_rad(rot_deg), 0)
+	d.scale = Vector3.ONE * scl
+	add_child(d)
+	for mi in d.find_children("*", "MeshInstance3D", true, false) + ([d] if d is MeshInstance3D else []):
+		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if block != Vector2.ZERO:
+		obstacles.append([Vector3(pos.x, 0, pos.z), block])
+	return d
+
+func _exit_tree() -> void:
+	for k in decor_cache:
+		(decor_cache[k] as Node).free()
+	decor_cache.clear()
+
+func _place_decor() -> void:
+	match stage:
+		"ground":
+			_decor("bg_school", "", Vector3(0, 0, -20.5), 0.0, 1.0)
+			_decor("set_ground", "p4", Vector3(0, 0, -15.6), 0.0, 2.6)
+			_decor("set_ground", "p5", Vector3(-11.5, 0, -15.0), 0.0, 1.8)
+			_decor("set_ground", "p5", Vector3(11.5, 0, -15.0), 0.0, 1.8)
+		"hall":
+			var left := ["p0", "p1", "p2", "p6"]
+			var right := ["p3", "p4", "p5"]
+			var z := -AZ + 3.0
+			var i := 0
+			while z < AZ - 2.0:
+				_decor("set_hall", left[i % left.size()], Vector3(-AX - 0.3, 0, z), 90.0, 1.0)
+				_decor("set_hall", right[i % right.size()], Vector3(AX + 0.35, 0, z + 2.5), -90.0, 1.0)
+				z += 5.0
+				i += 1
+		"lab":
+			_decor("set_lab", "p0", Vector3(-3.0, 0, -11.6), 0.0, 1.5)
+			_decor("set_lab", "p2", Vector3(3.0, 0, -11.5), 0.0, 1.3)
+			_decor("set_lab", "p6", Vector3(9.5, 0, -11.8), 0.0, 1.4)
+			_decor("set_lab", "p3", Vector3(-11.8, 0, -4.0), 90.0, 1.5)
+			_decor("set_lab", "p4", Vector3(-11.9, 0.8, 4.0), 90.0, 1.5)
+			_decor("set_lab", "p1", Vector3(-9.0, 0, 10.0), 180.0, 1.2, Vector2(0.5, 0.4))
+			_decor("set_lab", "p1", Vector3(9.0, 0, -3.0), 0.0, 1.2, Vector2(0.5, 0.4))
+			_decor("set_lab", "p5", Vector3(9.5, 0, 9.5), 0.0, 1.5, Vector2(0.4, 0.4))
+		"toilet":
+			_decor("set_toilet", "p1", Vector3(AX + 0.6, 0, 0.0), -90.0, 1.4)
+			_decor("set_toilet", "p2", Vector3(-AX - 0.5, 0, 0.0), 90.0, 1.4)
+			_decor("set_toilet", "p4", Vector3(-7.5, 0, 2.5), 30.0, 1.1, Vector2(0.4, 0.4))
+			_decor("set_toilet", "p5", Vector3(7.8, 0, -2.6), 0.0, 1.2)
+			_decor("set_toilet", "p3", Vector3(-AX - 0.3, 0.6, -3.5), 90.0, 1.2)
+			_decor("set_toilet", "p0", Vector3(-3.0, 0, -AZ - 0.5), 0.0, 1.3)
+			_decor("set_toilet", "p0", Vector3(3.0, 0, -AZ - 0.5), 0.0, 1.3)
+		"roof":
+			_decor("set_roof", "p0", Vector3(-4.5, 0, -AZ - 2.6), 0.0, 1.6)
+			_decor("set_roof", "p1", Vector3(6.5, 0, 6.5), 0.0, 1.25)
+			_decor("set_roof", "p1", Vector3(-6.5, 0, -6.5), 0.0, 1.25)
+		"music":
+			_decor("set_music", "p1", Vector3(0.0, 0, -AZ - 0.2), 0.0, 1.5)
+			_decor("set_music", "p1", Vector3(AX + 0.3, 0, 2.0), -90.0, 1.5)
+			_decor("set_music", "p2", Vector3(-3.5, 0, 6.5), 0.0, 1.5, Vector2(0.35, 0.35))
+			_decor("set_music", "p3", Vector3(-AX - 0.2, 0, -2.0), 90.0, 1.2)
 
 func _apply_day_mod() -> void:
 	if day_mod == "vacation" and stage != "lab":
@@ -734,8 +808,9 @@ void fragment(){
 			L.append([_box(Vector3(1.8, 0.12, 0.2)), T(S + Vector3(x, 0.82 + fl * 2.2, 2.05)), Color("#5f8f4e")])
 	L.append([_box(Vector3(2.4, 2.6, 0.2)), T(S + Vector3(0, 1.3, 2.05)), Color("#6b4a32")])
 	L.append([_cyl(0.9, 0.15), T(S + Vector3(0, 6.2, 2.1), Vector3(90, 0, 0)), Color("#ffffff")])
-	L.append([_box(Vector3(6, 1.0, 3)), T(S + Vector3(0, 0.5, 3.3)), Color("#d9d2c3")])
-	L.append([_box(Vector3(6.4, 0.18, 3.4)), T(S + Vector3(0, 1.05, 3.3)), Color("#a9a294")])
+	if not ResourceLoader.exists("res://models/set_ground.glb"):
+		L.append([_box(Vector3(6, 1.0, 3)), T(S + Vector3(0, 0.5, 3.3)), Color("#d9d2c3")])
+		L.append([_box(Vector3(6.4, 0.18, 3.4)), T(S + Vector3(0, 1.05, 3.3)), Color("#a9a294")])
 	for side in [-1.0, 1.0]:
 		var gp := Vector3(side * 15.5, 0, 0)
 		for dz in [-2.5, 2.5]:
@@ -813,8 +888,9 @@ func _world_roof(e: Environment, sun: DirectionalLight3D) -> void:
 	# 저 아래 운동장과 하늘
 	L.append([_box(Vector3(80, 0.1, 80)), T(Vector3(0, -12, 0)), Color("#d9b98a")])
 	for c in [Vector3(-6.5, 0, -6.5), Vector3(6.5, 0, 6.5)]:
-		L.append([_cyl(1.1, 1.8, -1, 16), T(c + Vector3(0, 0.9, 0)), Color("#5fa8d8")])
-		L.append([_cyl(1.15, 0.12, -1, 16), T(c + Vector3(0, 1.85, 0)), Color("#3f88b8")])
+		if not ResourceLoader.exists("res://models/set_roof.glb"):
+			L.append([_cyl(1.1, 1.8, -1, 16), T(c + Vector3(0, 0.9, 0)), Color("#5fa8d8")])
+			L.append([_cyl(1.15, 0.12, -1, 16), T(c + Vector3(0, 1.85, 0)), Color("#3f88b8")])
 		obstacles.append([c, Vector2(1.0, 1.0)])
 	L.append([_box(Vector3(2.4, 2.4, 1.8)), T(Vector3(6.0, 1.2, -7.6)), Color("#e8dcc0")])
 	L.append([_box(Vector3(1.0, 1.9, 0.08)), T(Vector3(6.0, 0.95, -6.66)), Color("#6b4a32")])
@@ -1404,6 +1480,10 @@ func supports_def() -> Dictionary:
 func lv(id: String) -> int:
 	return int(mains.get(id, 0)) + int(supports.get(id, 0))
 
+func combo_mult() -> float:
+	# 콤보가 쌓일수록 세져요: 25콤보마다 +5%, 최대 +60%
+	return 1.0 + minf(0.6, float(combo / 25) * 0.05)
+
 func dmg_mult() -> float:
 	return (1.0 + 0.15 * lv("bottle")) * (1.0 + 0.08 * Save.shop_lv("dmg"))
 func crit_chance() -> float:
@@ -1830,7 +1910,7 @@ func _update_enemies(dt: float) -> void:
 func _hit_enemy(e: Dictionary, dmg: float, dir: Vector3, knock := 5.0, quiet := false) -> void:
 	if e["dead"] >= 0.0:
 		return
-	dmg *= dmg_mult()
+	dmg *= dmg_mult() * combo_mult()
 	var crit := rng.randf() < crit_chance()
 	if crit:
 		dmg *= 2.0 + 0.3 * lv("magnifier")
@@ -3548,7 +3628,9 @@ func _update_hud() -> void:
 		if c.has_meta("ready"):
 			(c as Control).modulate = Color(1, 1, 1).lerp(Color(1.6, 1.4, 0.6), 0.5 + 0.5 * sin(elapsed * 8.0))
 	if combo >= 5:
-		combo_label.text = "%d 콤보!" % combo
+		var cm := combo_mult()
+		combo_label.text = "%d 콤보!" % combo + ("\n피해 x%.2f" % cm if cm > 1.0 else "")
+		combo_label.add_theme_color_override("font_color", Color("#ffdf3d").lerp(Color("#ff5c7a"), clampf((cm - 1.0) / 0.6, 0, 1)))
 		combo_label.modulate.a = minf(1.0, clampf(combo_timer / 1.6, 0, 1) * 3.0)
 		combo_label.scale = Vector2.ONE * (1.0 + maxf(0.0, combo_timer - 1.45) * 3.0)
 	else:
@@ -4416,6 +4498,11 @@ func _setup_shot() -> void:
 		call_deferred("_pause_menu")
 	if shot_mode == "settings":
 		call_deferred("_open_settings")
+	if OS.get_cmdline_user_args().has("--overview"):
+		cam_off = Vector3(0, 22, 18) if stage != "hall" else Vector3(0, 14, 12)
+		cam.position = player.position + cam_off
+		if tut_node:
+			tut_node.visible = false
 	if shot_mode == "tut":
 		elapsed = 0.0
 		for e in enemies:
