@@ -3610,7 +3610,7 @@ func _sync_draw() -> void:
 		var b: Dictionary = bullets[i]
 		# 길쭉한 물줄기: 꿈틀꿈틀 굵기가 바뀌어요
 		var wob := 1.0 + 0.12 * sin(elapsed * 40.0 + i)
-		var basis := Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.62 * wob, 0.62 / wob, 3.4) * b["size"])
+		var basis := Basis.looking_at(b["dir"], Vector3.UP) * Basis.from_scale(Vector3(0.62 * wob, 0.62 / wob, 3.4) * b["size"])
 		bm.set_instance_transform(i, Transform3D(basis, b["pos"]))
 		if evolved.has("gun"):
 			var hc := Color.from_hsv(fmod(elapsed * 0.7 + i * 0.13, 1.0), 0.45, 1.0, 0.97)
@@ -3618,7 +3618,7 @@ func _sync_draw() -> void:
 		else:
 			bm.set_instance_custom_data(i, Color(0.7, 0.92, 1.0, 0.95))
 		var bg: MultiMesh = mm["bglow"].multimesh
-		bg.set_instance_transform(i, Transform3D(Basis.looking_at(b["dir"], Vector3.UP).scaled(Vector3(0.38, 0.38, 1.1) * b["size"]), b["pos"] - (b["dir"] as Vector3) * 0.25 * b["size"]))
+		bg.set_instance_transform(i, Transform3D(Basis.looking_at(b["dir"], Vector3.UP) * Basis.from_scale(Vector3(0.38, 0.38, 1.1) * b["size"]), b["pos"] - (b["dir"] as Vector3) * 0.25 * b["size"]))
 		bg.set_instance_custom_data(i, Color(0.9, 0.7, 0.3, 0.7) if evolved.has("gun") else Color(0.15, 0.45, 0.9, 0.5))
 	bm.visible_instance_count = bn
 	mm["bglow"].multimesh.visible_instance_count = bn
@@ -3795,8 +3795,10 @@ func _process(delta: float) -> void:
 				e["hp"] = 99999.0
 		if shot_mode == "sup":
 			move_dir = Vector3(1, 0, 0)
-		if (shot_mode == "sup" or shot_mode.begins_with("pat_")) and shot_frames in [20, 35, 50, 70, 90]:
+		if (shot_mode == "sup" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
 			get_viewport().get_texture().get_image().save_png("/tmp/f_%s_%d.png" % [shot_mode, shot_frames])
+		if shot_mode.begins_with("gun_") and bullets.size() > 0 and shot_frames % 2 == 0 and shot_frames < 90:
+			get_viewport().get_texture().get_image().save_png("/tmp/gb_%s_%d.png" % [shot_mode, shot_frames])
 		if shot_mode == "boss" and shot_frames % 12 == 0:
 			get_viewport().get_texture().get_image().save_png("/tmp/bs_%03d.png" % shot_frames)
 		if shot_mode == "cpaper" and cpapers.size() > 0 and shot_frames % 3 == 0:
@@ -5230,6 +5232,16 @@ func _setup_shot() -> void:
 		for k in ["kettle", "eraser", "dust", "paper", "egg"]:
 			var e := _make_enemy(k, Vector3(-3.0 + ["kettle", "eraser", "dust", "paper", "egg"].find(k) * 1.5, 0, 0.5))
 			e["speed"] = 0.0
+		spawn_timer = 999.0
+		next_elite = 9999.0
+		return
+	if shot_mode.begins_with("gun_"):
+		# 물총 방향 확인용: 귀신 하나를 오른쪽(gun_x) 또는 위쪽(gun_z)에 세워 둬요
+		var gp := Vector3(4.5, 0, 0) if shot_mode == "gun_x" else (Vector3(-3.2, 0, -3.2) if shot_mode == "gun_d" else Vector3(0, 0, -4.5))
+		var ge := _make_enemy("kettle", gp)
+		ge["speed"] = 0.0
+		ge["hp"] = 99999.0
+		ge["spawn"] = 1.0
 		spawn_timer = 999.0
 		next_elite = 9999.0
 		return
