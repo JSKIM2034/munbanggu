@@ -128,6 +128,7 @@ func _row(parent: Control, h: float, border: Color, bg := CREAM) -> Panel:
 
 func _right_btn(row: Panel, text: String, col: Color, enabled: bool, cb: Callable, w := 190.0) -> Button:
 	var b := B(text, col, 30)
+	main._fit(b, w - 30)
 	b.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
 	b.offset_left = -w - 22
 	b.offset_right = -22
@@ -258,27 +259,33 @@ func _stage() -> void:
 	var mrow := _row(vb, 130, Color(md["col"]))
 	var ml := L(tr("오늘은 ") + md["name"], 40, INK, mrow)
 	ml.position = Vector2(28, 14)
+	main._fit(ml, 600)
 	var mdl := L(md["desc"], 26, SUB, mrow)
 	mdl.position = Vector2(28, 74)
+	main._fit(mdl, 600)
 	for sid in Save.STAGE_ORDER:
 		var s: Dictionary = Save.STAGES[sid]
 		var open := Save.stage_unlocked(sid)
 		var row := _row(vb, 400, Color(s["col"]) if open else Color("#9b8aa5"), CREAM if open else Color("#e9e2ee"))
 		var nm := L(s["name"] if open else s["name"] + tr("  (잠김)"), 50, INK, row)
 		nm.position = Vector2(30, 22)
+		main._fit(nm, 600)
 		var ds := L(s["desc"], 28, SUB, row)
 		ds.position = Vector2(30, 90)
-		ds.size = Vector2(600, 40)
+		main._fit(ds, 600)
 		var bl := L(tr("보스: ") + s["boss"], 26, Color("#c0506a"), row)
 		bl.position = Vector2(30, 134)
+		main._fit(bl, 425)
 		if not open:
 			var need: String = s["need"]
 			var lk := L(tr("%s %d단계까지 깨면 열려요 (지금 %d단계)") % [Save.STAGES[need]["name"], Save.UNLOCK_GRADE, int(Save.data["clears"].get(need, 0))], 30, Color("#8a7a95"), row)
-			lk.position = Vector2(30, 220)
+			lk.position = Vector2(30, 200)
+			main._fit_box(lk, 600, 90)
 			continue
 		var mg := Save.max_grade(sid)
 		var gl := L(tr("단계"), 30, INK, row)
 		gl.position = Vector2(30, 196)
+		main._fit(gl, 66)
 		var ss: String = sid
 		for pair in [[-10, "-10"], [-1, "-"], [1, "+"], [10, "+10"]]:
 			var dv: int = pair[0]
@@ -295,11 +302,15 @@ func _stage() -> void:
 				show_screen("stage"))
 		var gnum := L(tr("%d단계") % sel[sid], 44, Color("#e8524a"), row, 0)
 		gnum.position = Vector2(282, 186)
+		main._fit(gnum, 114)
+		gnum.position.y = 186 + (44 - gnum.get_theme_font_size("font_size")) * 0.6
 		var gmax := L(tr("(최고 %d)") % mg, 22, SUB, row)
-		gmax.position = Vector2(580, 206)
+		gmax.position = Vector2(574, 206)
+		main._fit(gmax, 80)
 		var wid := Save.weather_for(sid, sel[sid])
 		var wl := L(Save.WEATHERS[wid]["name"], 26, Color(Save.WEATHERS[wid]["col"]).darkened(0.25), row)
 		wl.position = Vector2(470, 134)
+		main._fit(wl, 160)
 		var bk: String = "%s_%d" % [sid, sel[sid]]
 		var best: Dictionary = Save.data["best"].get(bk, {})
 		var rec := tr("아직 기록이 없어요")
@@ -309,6 +320,7 @@ func _stage() -> void:
 		var hint := tr("  |  귀신 체력 x%.1f  동전 x%.1f") % [(1.0 + 0.45 * g0 + 0.02 * g0 * g0), 1.0 + 0.35 * g0]
 		var rl := L(rec + hint, 24, SUB, row)
 		rl.position = Vector2(30, 268)
+		main._fit(rl, 600)
 		var go := B(tr("출발!"), Color("#ff9a2f"), 40)
 		go.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 		go.offset_left = -230
@@ -327,15 +339,19 @@ func _stage() -> void:
 		var lrow := _row(vb, 120, Color("#c9bfd3"), Color("#e9e2ee"))
 		var ll := L(tr("이번 주 도전 (운동장 보스를 물리치면 열려요)"), 30, Color("#8a7a95"), lrow)
 		ll.position = Vector2(28, 40)
+		main._fit(ll, 600)
 		return
 	var wc := Save.weekly_cfg()
 	var wrow := _row(vb, 250, Color("#ffc928"), Color("#fff1b8"))
 	var wl := L(tr("이번 주 도전 (특별 규칙)"), 40, INK, wrow)
 	wl.position = Vector2(28, 16)
+	main._fit(wl, 600)
 	var wd := L(tr("%s 2단계, %s를 빌려서, %s\n모두 같은 조건! 점수를 단톡방에 자랑해요") % [Save.STAGES[wc["stage"]]["name"], Save.CHARS[wc["char"]]["name"], Save.DAY_MODS[wc["mod"]]["name"]], 26, SUB, wrow)
 	wd.position = Vector2(28, 76)
+	main._fit(wd, 600)
 	var wb := L(tr("이번 주 최고 점수 %d") % Save.weekly_best(), 28, Color("#d08a00"), wrow)
 	wb.position = Vector2(28, 160)
+	main._fit(wb, 380)
 	var wgo := B(tr("도전!"), Color("#e8524a"), 40)
 	wgo.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	wgo.offset_left = -210
@@ -361,13 +377,14 @@ func _shop() -> void:
 		main._badge(row, it["icon"], Color(it["col"]), 110, Vector2(22, 30))
 		var nm := L(it["name"], 40, INK, row)
 		nm.position = Vector2(150, 22)
+		main._fit(nm, 290)
 		var pips := (tr("강화 +%d") % lvl) + (" / %d" % mx if mx >= 0 else "")
 		var lv := L(pips, 28, Color("#ff8a2f") if lvl > 0 else Color("#b9b0bf"), row)
 		lv.position = Vector2(150, 72)
+		main._fit(lv, 290)
 		var ds := L(it["desc"], 24, SUB, row)
-		ds.position = Vector2(150, 112)
-		ds.size = Vector2(330, 50)
-		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ds.position = Vector2(150, 108)
+		main._fit_box(ds, 290, 56)
 		var cost := Save.shop_cost(id)
 		if cost < 0:
 			_right_btn(row, tr("다 샀어요"), Color("#b9b0bf"), false, func(): pass)
@@ -391,10 +408,13 @@ func _friends() -> void:
 		main._badge(row, c["icon"] if open else "?", Color(c["col"]) if open else Color("#9b8aa5"), 130, Vector2(22, 34))
 		var nm := L(c["name"], 46, INK, row)
 		nm.position = Vector2(175, 22)
+		main._fit(nm, 280 if open else 170)
 		var wp := L(tr("시작 무기: ") + main.mains_def()[c["weapon"]]["name"], 28, SUB, row)
 		wp.position = Vector2(175, 86)
+		main._fit(wp, 280 if open else 450)
 		var pk := L(tr("특기: ") + c["perk"], 28, Color("#d08a00"), row)
 		pk.position = Vector2(175, 128)
+		main._fit(pk, 280 if open else 450)
 		var pw := L(tr("기본 피해 x%.1f") % float(c["power"]), 26, Color("#e8524a"), row)
 		pw.position = Vector2(175, 166)
 		if not open:
@@ -404,8 +424,9 @@ func _friends() -> void:
 			lk.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			lk.offset_left = -330
 			lk.offset_right = -24
-			lk.offset_top = 22
-			lk.offset_bottom = 100
+			lk.offset_top = 14
+			lk.offset_bottom = 110
+			main._fit_box(lk, 306, 96)
 		elif Save.data["char"] == cid:
 			_right_btn(row, tr("함께해요"), Color("#2fc79a"), false, func(): pass, 170)
 		else:
@@ -428,8 +449,10 @@ func _ach() -> void:
 		var row := _row(vb, 130, Color("#2fc79a"))
 		var nm := L(q["desc"], 34, INK, row)
 		nm.position = Vector2(28, 18)
+		main._fit(nm, 440)
 		var pl := L(tr("%d / %d   |  동전 %d") % [prog, int(q["goal"]), Save.DAILY_REWARD], 26, SUB, row)
 		pl.position = Vector2(28, 74)
+		main._fit(pl, 440)
 		var claimed: bool = Save.data["daily"]["claimed"].has(qid)
 		var q2: String = qid
 		var qcb := func():
@@ -440,6 +463,7 @@ func _ach() -> void:
 	var brow := _row(vb, 110, Color("#ffb03f"))
 	var bn := L(tr("숙제 3개 다 하면 보너스 동전 %d") % Save.DAILY_BONUS, 30, INK, brow)
 	bn.position = Vector2(28, 34)
+	main._fit(bn, 440)
 	var bdone: bool = Save.data["daily"]["bonus"]
 	var bcb := func():
 		Save.claim_daily("bonus")
@@ -453,9 +477,11 @@ func _ach() -> void:
 		var row := _row(vb, 140, Color("#ff7aa8") if done else Color("#c9bfd3"), CREAM if done or claimed else Color("#f3eef6"))
 		var nm := L((tr("[도장] ") if claimed else "") + a["name"], 36, INK, row)
 		nm.position = Vector2(28, 16)
+		main._fit(nm, 440)
 		var cur := mini(Save.stat(a["stat"]), int(a["goal"]))
 		var ds := L(tr("%s  (%d/%d)  동전 %d") % [a["desc"], cur, int(a["goal"]), int(a["reward"])], 24, SUB, row)
 		ds.position = Vector2(28, 76)
+		main._fit(ds, 440)
 		ds.size = Vector2(450, 40)
 		ds.clip_text = true
 		var aid: String = a["id"]
@@ -483,10 +509,13 @@ func _book() -> void:
 		main._badge(row, d["icon"], Color(d["col"]), 100, Vector2(22, 25))
 		var nm := L("%s Lv.5 + %s" % [d["name"], sd[d["partner"]]["name"]], 34, INK, row)
 		nm.position = Vector2(140, 16)
+		main._fit(nm, 490)
 		var ev := L("= " + d["evo"], 32, Color("#d08a00"), row)
 		ev.position = Vector2(140, 62)
+		main._fit(ev, 490)
 		var ds := L(d["evo_desc"], 22, SUB, row)
-		ds.position = Vector2(140, 108)
+		ds.position = Vector2(140, 104)
+		main._fit_box(ds, 490, 40)
 	var tip := L(tr("만난 귀신 %d / %d") % [total, Save.BESTIARY.size()], 30, Color.WHITE, vb, 8)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	for k in Save.BESTIARY:
@@ -501,6 +530,5 @@ func _book() -> void:
 		var cnt := L(tr("%d마리 물리침") % n if seen else tr("아직 못 만났어요"), 26, Color("#d08a00"), row)
 		cnt.position = Vector2(150, 72)
 		var ds := L(b["desc"] if seen else "", 24, SUB, row)
-		ds.position = Vector2(150, 110)
-		ds.size = Vector2(520, 50)
-		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ds.position = Vector2(150, 108)
+		main._fit_box(ds, 480, 56)

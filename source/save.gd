@@ -142,6 +142,9 @@ func _ready() -> void:
 	for k in en:
 		t.add_message(k, en[k])
 	TranslationServer.add_translation(t)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--lang="):
+			data["lang"] = a.substr(7)   # 시험용: 언어를 바로 골라요 (저장하지 않아도 돼요)
 	apply_lang()
 
 # ---------- 언어 ----------

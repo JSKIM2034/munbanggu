@@ -224,6 +224,8 @@ func _ready() -> void:
 			Save.run_cfg["grade"] = int(a.substr(8))
 		if a.begins_with("--char="):
 			Save.data["char"] = a.substr(7)
+		if a.begins_with("--seed="):
+			rng.seed = int(a.substr(7))
 	if args.has("--seed"):
 		rng.seed = 7
 	if args.has("--weekly"):
@@ -1966,6 +1968,8 @@ func _update_mission(dt: float) -> void:
 	else:
 		head = head % [mission["goal"]]
 	mission_label.text = head + "\n" + line
+	mission_label.add_theme_font_size_override("font_size", 30)
+	_fit(mission_label, 680, 0.7)
 	if done:
 		_end_mission(true)
 	elif left <= 0.0 and mission["kind"] != "nohit":
@@ -4015,6 +4019,57 @@ func _label(text: String, size: int, col := Color.WHITE, parent: Node = null, ou
 	(parent if parent else ui).add_child(l)
 	return l
 
+# 글자가 자리보다 길면(주로 영어) 글자 크기를 줄여서 한 줄에 맞춰요
+func _text_w(l: Control, fs: int) -> float:
+	var f: Font = l.get_theme_font("font")
+	var w := 0.0
+	for line in str(l.get("text")).split("\n"):
+		w = maxf(w, f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+	return w + l.get_theme_constant("outline_size")
+
+func _fit(l: Control, max_w: float, min_scale := 0.55) -> Control:
+	var fs: int = l.get_theme_font_size("font_size")
+	var lo := int(fs * min_scale)
+	while fs > lo and _text_w(l, fs) > max_w:
+		fs -= 1
+	l.add_theme_font_size_override("font_size", fs)
+	return l
+
+# 여러 줄로 직접 나누고(단어 단위), 상자 높이를 넘으면 글자 크기를 줄여요
+func _wrap_lines(f: Font, text: String, w: float, fs: int) -> PackedStringArray:
+	var out := PackedStringArray()
+	for para in text.split("\n"):
+		var cur := ""
+		for word in para.split(" "):
+			var t := word if cur == "" else cur + " " + word
+			if cur != "" and f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > w:
+				out.append(cur)
+				cur = word
+			else:
+				cur = t
+		out.append(cur)
+	return out
+
+func _fit_box(l: Label, w: float, h: float, min_scale := 0.55) -> Label:
+	var f: Font = l.get_theme_font("font")
+	var src := l.text
+	var fs: int = l.get_theme_font_size("font_size")
+	var lo := int(fs * min_scale)
+	var lines := _wrap_lines(f, src, w, fs)
+	while fs > lo and (lines.size() * (f.get_height(fs) + l.get_theme_constant("line_spacing")) > h or _max_w(f, lines, fs) > w):
+		fs -= 1
+		lines = _wrap_lines(f, src, w, fs)
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
+	l.text = "\n".join(lines)
+	l.add_theme_font_size_override("font_size", fs)
+	return l
+
+func _max_w(f: Font, lines: PackedStringArray, fs: int) -> float:
+	var m := 0.0
+	for line in lines:
+		m = maxf(m, f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+	return m
+
 func _round_panel(col: Color, radius := 28, border := Color("#3a2148"), bw := 6) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = col
@@ -4312,6 +4367,8 @@ func _banner(text: String, col: Color) -> void:
 		banner_label.offset_bottom = -260
 		banner_label.pivot_offset = Vector2(360, 35)
 	banner_label.text = text
+	banner_label.add_theme_font_size_override("font_size", 46)
+	_fit(banner_label, 690, 0.6)
 	banner_label.add_theme_color_override("font_color", col)
 	banner_t = 2.2
 
@@ -4573,13 +4630,15 @@ func _make_card(c: Dictionary) -> Button:
 	tg.offset_left = -220
 	tg.offset_right = -26
 	tg.offset_top = 30
+	_fit(nm, 600 - 168 - 40 - _text_w(tg, 30))
+	nm.position.y = 26 + (44 - nm.get_theme_font_size("font_size")) * 0.6
 	var ds := _label(desc, 30, Color("#5b4a66"), b, 0)
 	ds.position = Vector2(168, 88)
-	ds.size = Vector2(410, 70)
-	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_fit_box(ds, 390, 72)
 	if setline != "":
 		var sl := _label(setline, 24, Color("#d08a00") if setline.contains(tr("있어요")) or gold else Color("#9b8aa5"), b, 0)
 		sl.position = Vector2(168, 162)
+		_fit(sl, 390)
 	b.pressed.connect(func(): _apply_card(c))
 	return b
 
