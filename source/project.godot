@@ -30,3 +30,7 @@ Save="*res://save.gd"
 [audio]
 
 driver/output_latency.web=90
+
+[internationalization]
+
+locale/fallback="ko"

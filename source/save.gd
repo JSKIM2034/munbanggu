@@ -8,7 +8,7 @@ var mode := "menu"                     # "menu" 또는 "run"
 var run_cfg := {"stage": "ground", "grade": 1}
 var last_result := {}                   # 방금 끝난 판 (메뉴에서 보여줘요)
 
-const STAGES := {
+const STAGES_KO := {
 	"ground": {"name": "운동장", "desc": "넓은 흙 운동장. 사방에서 귀신이 몰려와요.", "boss": "분실물함 대왕귀신", "need": "", "col": "#e8b77a"},
 	"hall": {"name": "학교 복도", "desc": "길고 좁은 복도! 양쪽 끝에서 귀신이 밀려와요.", "boss": "청소함 대왕귀신", "need": "ground", "col": "#8fd1a8"},
 	"lab": {"name": "밤의 과학실", "desc": "불 꺼진 과학실. 손전등 불빛만 믿어야 해요.", "boss": "인체모형 대왕귀신", "need": "hall", "col": "#6f7fd8"},
@@ -16,11 +16,12 @@ const STAGES := {
 	"roof": {"name": "옥상", "desc": "바람이 세게 불어요. 난간 밖으로 밀려난 귀신은 떨어져요.", "boss": "물탱크 대왕귀신", "need": "toilet", "col": "#f2a65a"},
 	"music": {"name": "음악실", "desc": "쿵짝쿵짝! 박자마다 철수 주변에 충격파가 퍼져요.", "boss": "피아노 대왕귀신", "need": "roof", "col": "#c98ef0"},
 }
+var STAGES: Dictionary = trd(STAGES_KO)
 const STAGE_ORDER := ["ground", "hall", "lab", "toilet", "roof", "music"]
 
 # 특별한 날: 날짜마다 바뀌어요
 # 단계마다 바뀌는 날씨(바깥)와 학교 안 사건(건물 안). 10단계마다 한 바퀴 돌아요.
-const WEATHERS := {
+const WEATHERS_KO := {
 	"sunny": {"name": "맑은 날", "desc": "", "col": "#ffb03f"},
 	"sunset": {"name": "노을 지는 저녁", "desc": "하늘이 붉어지고 귀신이 조금 더 많이 와요", "col": "#ff8a5c"},
 	"rain": {"name": "비 오는 날", "desc": "물웅덩이에서 미끄러져요. 귀신도 웅덩이에선 느려요", "col": "#58a6e8"},
@@ -34,30 +35,33 @@ const WEATHERS := {
 	"thunder": {"name": "창밖 천둥", "desc": "번쩍! 번개가 떨어질 곳을 피해요. 귀신도 맞아요", "col": "#7a6fd8"},
 	"midnight": {"name": "한밤의 학교", "desc": "깜깜한데 번개까지 쳐요!", "col": "#3a2f6a"},
 }
+var WEATHERS: Dictionary = trd(WEATHERS_KO)
 const OUT_WEATHER := ["sunny", "sunny", "sunset", "sunset", "rain", "rain", "night", "snow", "snow", "storm"]
 const IN_WEATHER := ["normal", "normal", "cleaning", "cleaning", "blackout", "blackout", "alarm", "alarm", "thunder", "midnight"]
 func weather_for(sid: String, g: int) -> String:
 	var L: Array = OUT_WEATHER if sid in ["ground", "roof"] else IN_WEATHER
 	return L[(maxi(g, 1) - 1) % L.size()]
 
-const DAY_MODS := {
+const DAY_MODS_KO := {
 	"normal": {"name": "평범한 날", "desc": "오늘은 별일 없어요.", "col": "#b9b0bf"},
 	"rain": {"name": "비 오는 날", "desc": "물웅덩이에서 미끄러져요. 귀신도 느려져요. 동전 +20%", "col": "#58a6e8"},
 	"sports": {"name": "운동회 날", "desc": "모두 빨라져요! 계주 귀신이 달려와요. 동전 +20%", "col": "#ff9a2f"},
 	"exam": {"name": "시험 기간", "desc": "보스가 1분 일찍 와요. 대신 경험치 +30%", "col": "#e8524a"},
 	"vacation": {"name": "방학", "desc": "밤의 학교! 손전등으로 버텨요. 동전 +30%", "col": "#4a4fa8"},
 }
+var DAY_MODS: Dictionary = trd(DAY_MODS_KO)
 const MAX_GRADE := 99
 
-const CHARS := {
+const CHARS_KO := {
 	"chulsoo": {"name": "철수", "weapon": "gun", "perk": "물총 피해 +10%", "unlock": "", "need": [], "col": "#4fa8e8", "icon": "철", "power": 1.0},
 	"younghee": {"name": "영희", "weapon": "ddakji", "perk": "치명타 확률 +8%", "unlock": "", "need": ["ground", 5], "col": "#ff7aa8", "icon": "영", "power": 1.2},
 	"minsu": {"name": "민수", "weapon": "yoyo", "perk": "경험치 +15%", "unlock": "", "need": ["ground", 10], "col": "#2fc79a", "icon": "민", "power": 1.4},
 	"sunja": {"name": "순자", "weapon": "rubber", "perk": "최대 하트 +2", "unlock": "", "need": ["hall", 5], "col": "#ff9a2f", "icon": "순", "power": 1.6},
 }
+var CHARS: Dictionary = trd(CHARS_KO)
 const CHAR_ORDER := ["chulsoo", "younghee", "minsu", "sunja"]
 
-const SHOP := [
+const SHOP_KO := [
 	{"id": "w_gun", "name": "물총 강화", "icon": "물", "desc": "물총 피해 +12%, 연사 +4%", "base": 50, "col": "#4fa8e8"},
 	{"id": "w_ddakji", "name": "딱지 강화", "icon": "딱", "desc": "딱지 피해 +12%, 회전 +4%", "base": 50, "col": "#ff7aa8"},
 	{"id": "w_yoyo", "name": "요요 강화", "icon": "요", "desc": "요요 피해 +12%, 대기 -4%", "base": 50, "col": "#2fc79a"},
@@ -74,8 +78,9 @@ const SHOP := [
 	{"id": "reroll", "name": "다시 뽑기권", "icon": "뽑", "desc": "판마다 카드 다시 뽑기 +1번", "base": 100, "max": 5, "col": "#58c6f2"},
 	{"id": "revive", "name": "오뚝이", "icon": "뚝", "desc": "판마다 1번 되살아나요", "base": 600, "max": 3, "col": "#c9a8f0"},
 ]
+var SHOP: Array = trd(SHOP_KO)
 
-const ACH := [
+const ACH_KO := [
 	{"id": "kills100", "name": "첫 퇴마", "desc": "귀신 100마리 물리치기", "stat": "total_kills", "goal": 100, "reward": 50},
 	{"id": "kills500", "name": "동네 퇴마사", "desc": "귀신 500마리 (영희가 친구가 돼요)", "stat": "total_kills", "goal": 500, "reward": 120},
 	{"id": "kills3000", "name": "학교 퇴마왕", "desc": "귀신 3,000마리", "stat": "total_kills", "goal": 3000, "reward": 400},
@@ -101,8 +106,9 @@ const ACH := [
 	{"id": "grade50", "name": "전설의 선생님", "desc": "아무 곳이나 50단계 클리어", "stat": "best_grade", "goal": 50, "reward": 30000},
 	{"id": "friends4", "name": "퇴마단 결성", "desc": "친구 4명 모두 모으기", "stat": "friends", "goal": 4, "reward": 500},
 ]
+var ACH: Array = trd(ACH_KO)
 
-const DAILY_POOL := [
+const DAILY_POOL_KO := [
 	{"id": "kills", "desc": "귀신 400마리 물리치기", "goal": 400},
 	{"id": "elites", "desc": "정예 귀신 3마리 물리치기", "goal": 3},
 	{"id": "evos", "desc": "진화 1번 하기", "goal": 1},
@@ -112,10 +118,11 @@ const DAILY_POOL := [
 	{"id": "coins", "desc": "동전 150개 모으기", "goal": 150},
 	{"id": "chests", "desc": "보물 상자 2개 열기", "goal": 2},
 ]
+var DAILY_POOL: Array = trd(DAILY_POOL_KO)
 const DAILY_REWARD := 80
 const DAILY_BONUS := 100
 
-const BESTIARY := {
+const BESTIARY_KO := {
 	"paper": {"name": "휴지 귀신", "desc": "화장실 마지막 칸에 살아요. 휴지를 다 쓰면 나타난대요."},
 	"egg": {"name": "달걀 귀신", "desc": "얼굴이 없다더니 사실 있어요. 엄청 빨라요."},
 	"kettle": {"name": "주전자 귀신", "desc": "운동회 날 잃어버린 노란 주전자. 뜨겁고 단단해요."},
@@ -125,9 +132,62 @@ const BESTIARY := {
 	"relay": {"name": "계주 귀신", "desc": "운동회 날에만 나타나는 빨간 머리띠 귀신. 엄청 빨라요."},
 	"boss": {"name": "대왕귀신", "desc": "아무도 찾아가지 않은 물건들이 모여 생긴 왕 귀신."},
 }
+var BESTIARY: Dictionary = trd(BESTIARY_KO)
 
 func _ready() -> void:
 	load_data()
+	var t := Translation.new()
+	t.locale = "en"
+	var en: Dictionary = preload("res://lang_en.gd").EN
+	for k in en:
+		t.add_message(k, en[k])
+	TranslationServer.add_translation(t)
+	apply_lang()
+
+# ---------- 언어 ----------
+# 저장된 선택이 없으면 브라우저/기기 언어가 한국어일 때만 한국어, 그 밖은 영어예요.
+func lang() -> String:
+	var l: String = data.get("lang", "")
+	if l == "":
+		var sys := OS.get_locale_language()
+		if OS.has_feature("web"):
+			var nl = JavaScriptBridge.eval("(navigator.languages && navigator.languages[0]) || navigator.language || ''", true)
+			if nl is String and nl != "":
+				sys = nl.substr(0, 2).to_lower()
+		l = "ko" if sys == "ko" else "en"
+	return l
+
+func set_lang(l: String) -> void:
+	data["lang"] = l
+	save_data()
+	apply_lang()
+
+func apply_lang() -> void:
+	TranslationServer.set_locale(lang())
+	STAGES = trd(STAGES_KO)
+	WEATHERS = trd(WEATHERS_KO)
+	DAY_MODS = trd(DAY_MODS_KO)
+	CHARS = trd(CHARS_KO)
+	SHOP = trd(SHOP_KO)
+	ACH = trd(ACH_KO)
+	DAILY_POOL = trd(DAILY_POOL_KO)
+	BESTIARY = trd(BESTIARY_KO)
+
+# 표 안의 글자만 지금 언어로 바꾼 사본을 만들어요 (id 같은 키는 그대로).
+func trd(v: Variant) -> Variant:
+	if v is String:
+		return TranslationServer.translate(v) if v != "" else v
+	if v is Dictionary:
+		var d := {}
+		for k in v:
+			d[k] = trd(v[k])
+		return d
+	if v is Array:
+		var a := []
+		for x in v:
+			a.append(trd(x))
+		return a
+	return v
 
 func _default() -> Dictionary:
 	return {"coins": 0, "shop": {}, "char": "chulsoo", "clears": {}, "stats": {}, "ach_claimed": [],
@@ -257,7 +317,7 @@ func char_unlocked(id: String) -> bool:
 
 func char_need_text(id: String) -> String:
 	var nd: Array = CHARS[id]["need"]
-	return "%s %d단계를 깨면 와요" % [STAGES[nd[0]]["name"], int(nd[1])]
+	return tr("%s %d단계를 깨면 와요") % [STAGES[nd[0]]["name"], int(nd[1])]
 
 func buy_char(_id: String) -> bool:
 	return false
@@ -410,15 +470,15 @@ func record_run(r: Dictionary) -> Dictionary:
 	var news: Array = []
 	for a in ACH:
 		if ach_done(a) and not before_ach.has(a["id"]):
-			news.append("도장: " + a["name"])
+			news.append(tr("도장: ") + a["name"])
 	for c in CHAR_ORDER:
 		if char_unlocked(c) and not before_chars.has(c):
-			news.append("새 친구: " + CHARS[c]["name"] + "!")
+			news.append(tr("새 친구: ") + CHARS[c]["name"] + "!")
 	for s in STAGE_ORDER:
 		if stage_unlocked(s) and not before_stages.has(s):
-			news.append("새 장소: " + STAGES[s]["name"] + "!")
+			news.append(tr("새 장소: ") + STAGES[s]["name"] + "!")
 	if new_grade and int(r["grade"]) < MAX_GRADE:
-		news.append("%s %d단계가 열렸어요!" % [STAGES[r["stage"]]["name"], int(r["grade"]) + 1])
+		news.append(tr("%s %d단계가 열렸어요!") % [STAGES[r["stage"]]["name"], int(r["grade"]) + 1])
 	if weekly_new:
-		news.append("주간 도전 최고 기록!")
+		news.append(tr("주간 도전 최고 기록!"))
 	return {"news": news}

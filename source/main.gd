@@ -87,7 +87,7 @@ const KINDS := {
 	"boss": {"hp": 36000.0, "speed": 1.35, "r": 1.5, "scale": 3.0, "xp": 0, "col": "#6fbf4a", "from": 9999.0},
 }
 
-const MAINS := {
+const MAINS_KO := {
 	"gun": {"name": "물총", "icon": "물", "col": "#4fa8e8", "partner": "bottle", "evo": "소방차 물대포",
 		"evo_desc": "굵은 물대포! 60% 확률로 관통, 40% 확률로 물풍선처럼 펑!",
 		"desc": ["가장 가까운 귀신에게 물을 쏴요", "피해 +30%", "물줄기 +1갈래", "쏘는 속도 +30%", "물줄기 +1, 30% 확률로 관통"]},
@@ -107,7 +107,8 @@ const MAINS := {
 		"evo_desc": "무지개 고무줄이 두 겹으로 쫙쫙! 맞은 귀신은 느려져요",
 		"desc": ["고무줄이 쫙! 퍼지며 주변을 튕겨내요", "범위 +20%", "피해 +40%", "더 자주 퍼져요", "범위 +20%, 더 세게 튕겨요"]},
 }
-const SUPPORTS := {
+var MAINS: Dictionary = Save.trd(MAINS_KO)
+const SUPPORTS_KO := {
 	"bottle": {"name": "생수병", "icon": "병", "col": "#58c6f2", "desc": "피해 +15%, 가끔 물을 촤악 뿌려요", "set": "gun"},
 	"notebook": {"name": "공책", "icon": "책", "col": "#b48ef0", "desc": "범위 +15%, 공책 종이가 빙글빙글 돌아요", "set": "ddakji"},
 	"watch": {"name": "계산기 시계", "icon": "시", "col": "#7cc95a", "desc": "대기 시간 -8%, 띠띠! 주변 귀신이 느려져요", "set": "yoyo"},
@@ -117,6 +118,7 @@ const SUPPORTS := {
 	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "줍는 거리 +40% (바닥에 원이 보여요)", "set": ""},
 	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "하트 +1, 하트 방패가 한 번 막아 줘요", "set": ""},
 }
+var SUPPORTS: Dictionary = Save.trd(SUPPORTS_KO)
 var mains := {"gun": 1}          # 이름 -> 레벨
 var supports := {}               # 이름 -> 레벨
 var evolved := {}                # 이름 -> true
@@ -205,6 +207,9 @@ var perf_frames := 0
 
 # =========================================================
 func _ready() -> void:
+	MAINS = Save.trd(MAINS_KO)
+	SUPPORTS = Save.trd(SUPPORTS_KO)
+	BOSS_RANKS = Save.trd(BOSS_RANKS_KO)
 	rng.randomize()
 	var args := OS.get_cmdline_user_args()
 	auto_play = args.has("--auto")
@@ -311,14 +316,14 @@ func _ready() -> void:
 	if shot_mode != "":
 		_setup_shot()
 	_prewarm()
-	var bt := "%s %d단계" % [Save.STAGES[stage]["name"], grade]
+	var bt := tr("%s %d단계") % [Save.STAGES[stage]["name"], grade]
 	var wd: Dictionary = Save.WEATHERS[weather]
 	if wd["desc"] != "":
 		bt += "\n" + wd["name"] + "! " + wd["desc"]
 	if day_mod != "normal":
-		bt += "\n오늘은 " + Save.DAY_MODS[day_mod]["name"] + "!"
+		bt += tr("\n오늘은 ") + Save.DAY_MODS[day_mod]["name"] + "!"
 	if weekly:
-		bt = "주간 도전!\n" + bt
+		bt = tr("주간 도전!\n") + bt
 	_banner(bt, Color.WHITE)
 	_spawn_props(6)
 	if not Save.tut_seen("move") and shot_mode == "" and not auto_play:
@@ -341,7 +346,7 @@ func _make_move_tut() -> void:
 	tut_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	tut_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(tut_node)
-	var l := _label("화면을 누른 채로 끌면 움직여요\n공격은 저절로! 귀신을 피해 다녀요", 38, Color.WHITE, tut_node, 12)
+	var l := _label(tr("화면을 누른 채로 끌면 움직여요\n공격은 저절로! 귀신을 피해 다녀요"), 38, Color.WHITE, tut_node, 12)
 	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.offset_left = -340
@@ -379,23 +384,23 @@ func _update_tut_and_hints(dt: float) -> void:
 			lv5_told[id] = true
 			var pn: String = SUPPORTS[MAINS[id]["partner"]]["name"]
 			if supports.has(MAINS[id]["partner"]):
-				_banner("%s Lv.5! 다음 레벨업에 진화해요" % MAINS[id]["name"], Color("#ffd23f"))
+				_banner(tr("%s Lv.5! 다음 레벨업에 진화해요") % MAINS[id]["name"], Color("#ffd23f"))
 			else:
-				_banner("%s Lv.5! 짝꿍 %s 챙기면 진화!" % [MAINS[id]["name"], pn], Color("#ffd23f"))
+				_banner(tr("%s Lv.5! 짝꿍 %s 챙기면 진화!") % [MAINS[id]["name"], pn], Color("#ffd23f"))
 
 func _update_indicators() -> void:
 	# 화면 밖에 있는 보스, 정예 귀신, 뽑기통, 보물 상자를 가장자리에 알려 줘요
 	var targets: Array = []
 	if not boss.is_empty() and boss["dead"] < 0.0:
-		targets.append([boss["pos"], "보스", Color("#e8524a")])
+		targets.append([boss["pos"], tr("보스"), Color("#e8524a")])
 	for e in enemies:
 		if e["elite"] and e["dead"] < 0.0:
 			targets.append([e["pos"], "!", Color("#ffb03f")])
 	for d in drops:
 		if d["kind"] == "gacha":
-			targets.append([d["pos"], "뽑", Color("#ff9a2f")])
+			targets.append([d["pos"], tr("뽑"), Color("#ff9a2f")])
 		elif d["kind"] == "chest":
-			targets.append([d["pos"], "상", Color("#b5713a")])
+			targets.append([d["pos"], tr("상"), Color("#b5713a")])
 	var rect := get_viewport().get_visible_rect().size
 	var scale_v := rect / Vector2(get_viewport().size)
 	var n := 0
@@ -1658,7 +1663,7 @@ func coin_mult() -> float:
 	return (1.0 + 0.1 * Save.shop_lv("coin")) * (1.0 + 0.35 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.8) * {"rain": 1.2, "sports": 1.2, "vacation": 1.3}.get(day_mod, 1.0)
 const STAGE_MULT := {"ground": 1.0, "hall": 1.05, "lab": 1.1, "toilet": 1.15, "roof": 1.2, "music": 1.25}
 const BOSS_ORDER := ["ground", "hall", "lab", "toilet", "roof", "music"]
-const BOSS_RANKS := [
+const BOSS_RANKS_KO := [
 	{"pre": "", "tint": Color(1, 1, 1), "scale": 1.0},
 	{"pre": "화난 ", "tint": Color(1.7, 0.5, 0.45), "scale": 1.1},
 	{"pre": "얼음 ", "tint": Color(0.55, 1.1, 1.8), "scale": 1.15},
@@ -1666,6 +1671,7 @@ const BOSS_RANKS := [
 	{"pre": "황금 ", "tint": Color(1.45, 1.2, 0.5), "scale": 1.28},
 	{"pre": "전설의 ", "tint": Color(1.4, 0.6, 1.4), "scale": 1.38},
 ]
+var BOSS_RANKS: Array = Save.trd(BOSS_RANKS_KO)
 func boss_stage() -> String:
 	# 단계가 오를 때마다 다른 장소의 보스가 나와요 (1단계는 그 장소의 보스)
 	var i := BOSS_ORDER.find(stage)
@@ -1879,11 +1885,11 @@ func _start_mission() -> void:
 		"kills":
 			mission["goal"] = 25 + mini(dg, 10) * 2
 			mission["time"] = 25.0
-			mission["text"] = "숙제 검사! %d초 안에 귀신 %d마리"
+			mission["text"] = tr("숙제 검사! %d초 안에 귀신 %d마리")
 		"nohit":
 			mission["goal"] = 15
 			mission["time"] = 15.0
-			mission["text"] = "숙제 검사! %d초 동안 한 대도 안 맞기"
+			mission["text"] = tr("숙제 검사! %d초 동안 한 대도 안 맞기")
 		"zone":
 			mission["goal"] = 8
 			mission["time"] = 25.0
@@ -1892,7 +1898,7 @@ func _start_mission() -> void:
 			zp.x = clampf(zp.x, -AX + 2.0, AX - 2.0)
 			zp.z = clampf(zp.z, -AZ + 2.0, AZ - 2.0)
 			mission["pos"] = _push_out(zp, 2.0)
-			mission["text"] = "숙제 검사! 노란 동그라미 안에서 %d초 버티기"
+			mission["text"] = tr("숙제 검사! 노란 동그라미 안에서 %d초 버티기")
 			mission_zone = MeshInstance3D.new()
 			mission_zone.mesh = _cyl(1.0, 0.04, -1, 40)
 			var m := StandardMaterial3D.new()
@@ -1907,8 +1913,8 @@ func _start_mission() -> void:
 		"combo":
 			mission["goal"] = 40 + mini(dg, 10) * 3
 			mission["time"] = 30.0
-			mission["text"] = "숙제 검사! %d초 안에 %d콤보 만들기"
-	_banner("선생님이 숙제를 냈어요!", Color("#6ee0b0"))
+			mission["text"] = tr("숙제 검사! %d초 안에 %d콤보 만들기")
+	_banner(tr("선생님이 숙제를 냈어요!"), Color("#6ee0b0"))
 	_play("bell", 1.3, -4.0)
 	if mission_label == null:
 		mission_label = _label("", 30, Color("#fff8e8"), hud, 9)
@@ -1931,14 +1937,14 @@ func _update_mission(dt: float) -> void:
 		"kills":
 			mission["prog"] = kills - int(mission["start_kills"])
 			done = mission["prog"] >= mission["goal"]
-			line = "귀신 %d / %d   남은 시간 %d초" % [mini(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
+			line = tr("귀신 %d / %d   남은 시간 %d초") % [mini(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
 		"nohit":
 			if nohit_t < mission["t"] - 0.05:
 				_end_mission(false)
 				return
 			mission["prog"] = int(mission["t"])
 			done = mission["t"] >= mission["goal"]
-			line = "안 맞고 %d / %d초" % [mini(mission["prog"], mission["goal"]), mission["goal"]]
+			line = tr("안 맞고 %d / %d초") % [mini(mission["prog"], mission["goal"]), mission["goal"]]
 		"zone":
 			var zp: Vector3 = mission["pos"]
 			var inside := Vector2(player.position.x - zp.x, player.position.z - zp.z).length() < 2.2
@@ -1948,11 +1954,11 @@ func _update_mission(dt: float) -> void:
 				var m: StandardMaterial3D = mission_zone.material_override
 				m.albedo_color = Color(0.4, 1.0, 0.5, 0.45) if inside else Color(1.0, 0.85, 0.2, 0.3 + 0.15 * sin(elapsed * 6.0))
 			done = float(mission["prog"]) >= mission["goal"]
-			line = "동그라미 안 %.1f / %d초   남은 시간 %d초" % [minf(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
+			line = tr("동그라미 안 %.1f / %d초   남은 시간 %d초") % [minf(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
 		"combo":
 			mission["prog"] = maxi(int(mission["prog"]), combo)
 			done = mission["prog"] >= mission["goal"]
-			line = "최고 %d / %d콤보   남은 시간 %d초" % [mini(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
+			line = tr("최고 %d / %d콤보   남은 시간 %d초") % [mini(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
 	var head: String = mission["text"]
 	var n := head.count("%d")
 	if n == 2:
@@ -1973,13 +1979,13 @@ func _end_mission(ok: bool) -> void:
 	mission_label.visible = false
 	if ok:
 		missions_done += 1
-		_banner("참 잘했어요! 보물 상자!", Color("#ffdf3d"))
+		_banner(tr("참 잘했어요! 보물 상자!"), Color("#ffdf3d"))
 		_play("evo", 1.2, -3.0)
 		_drop("chest", player.position + Vector3(1.2, 0, 0))
 		_ring(player.position, Color(1.0, 0.85, 0.3, 1.0), 0.3, 3.0, 0.6)
 		_sparkle(player.position + Vector3(0, 1, 0), Color(1.0, 0.9, 0.4, 1.0), 20, 6.0, 0.15, 0.7)
 	else:
-		_banner("숙제를 못 했어요...", Color("#b9b0bf"))
+		_banner(tr("숙제를 못 했어요..."), Color("#b9b0bf"))
 		_play("ui_error", 1.0, -4.0)
 
 func _spawn_props(n: int) -> void:
@@ -2020,7 +2026,7 @@ func _event_logic() -> void:
 	_update_mission(dt)
 	# 급식 시간: 하트 잔치
 	if elapsed >= 120.0 and _once("lunch"):
-		_banner("급식 시간! 하트를 먹어요", Color("#ff5c7a"))
+		_banner(tr("급식 시간! 하트를 먹어요"), Color("#ff5c7a"))
 		_play("level", 1.0, -3.0)
 		for i in 2:
 			var a := TAU * i / 2.0 + rng.randf()
@@ -2031,14 +2037,14 @@ func _event_logic() -> void:
 	# 쉬는 시간 종: 귀신이 우르르 도망가요
 	var bell_t := boss_time - 70.0
 	if elapsed >= bell_t and _once("bell"):
-		_banner("땡땡땡! 쉬는 시간!\n귀신들이 도망가요", Color("#6ee0b0"))
+		_banner(tr("땡땡땡! 쉬는 시간!\n귀신들이 도망가요"), Color("#6ee0b0"))
 		_play("bell", 1.0, -1.0)
 		flee_t = 4.5
 	# 운동회 날: 계주 귀신
 	if day_mod == "sports":
 		for at in [100.0, 200.0]:
 			if elapsed >= at and _once("relay%d" % int(at)):
-				_banner("계주 귀신 출발!", Color("#ff6b6b"))
+				_banner(tr("계주 귀신 출발!"), Color("#ff6b6b"))
 				_play("warn", 1.6, -4.0)
 				var side := -1.0 if rng.randf() < 0.5 else 1.0
 				for i in 6:
@@ -2047,10 +2053,10 @@ func _event_logic() -> void:
 	if stage == "roof":
 		wind_t -= dt
 		if wind_t <= 0.0 and wind_on <= 0.0:
-			var dirs := [[Vector3(1, 0, 0), "오른쪽으로"], [Vector3(-1, 0, 0), "왼쪽으로"], [Vector3(0, 0, 1), "아래로"], [Vector3(0, 0, -1), "위로"]]
+			var dirs := [[Vector3(1, 0, 0), tr("오른쪽으로")], [Vector3(-1, 0, 0), tr("왼쪽으로")], [Vector3(0, 0, 1), tr("아래로")], [Vector3(0, 0, -1), tr("위로")]]
 			var d: Array = dirs[rng.randi() % 4]
 			set_meta("wind_dir", d[0])
-			_banner("휘이잉! 바람이 " + d[1] + " 불어요", Color("#9fd8ff"))
+			_banner(tr("휘이잉! 바람이 ") + d[1] + tr(" 불어요"), Color("#9fd8ff"))
 			_play("rubber", 0.4, -6.0)
 			wind_on = 4.5
 			wind_t = 13.0
@@ -2086,11 +2092,11 @@ func _event_logic() -> void:
 			if not ["boss", "dust", "relay", "pot", "ext"].has(kind) and elapsed >= kind_from(kind):
 				kinds.append(kind)
 		_make_enemy(kinds[rng.randi() % kinds.size()], _spawn_point(), true)
-		_banner("반짝반짝 정예 귀신 등장!", Color("#ffdf3d"))
+		_banner(tr("반짝반짝 정예 귀신 등장!"), Color("#ffdf3d"))
 		_play("warn", 1.4, -10.0)
 	if elapsed >= boss_time - 5.0 and not boss_warned:
 		boss_warned = true
-		_banner(boss_name() + "이 와요!", Color("#ff7aa8"))
+		_banner(boss_name() + tr("이 와요!"), Color("#ff7aa8"))
 		_play("warn", 1.0, 0.0)
 	if elapsed >= boss_time and not boss_spawned:
 		boss_spawned = true
@@ -2166,7 +2172,7 @@ func _update_enemies(dt: float) -> void:
 		e["pos"] += (e["vel"] + (wind * 1.6 if e["kind"] != "boss" else Vector3.ZERO)) * dt
 		if stage == "roof" and e["kind"] != "boss" and (absf(e["pos"].x) > AX + 0.7 or absf(e["pos"].z) > AZ + 0.7):
 			# 난간 밖으로 떨어졌어요!
-			_number(e["pos"] + Vector3(0, 1.2, 0), 0, false, "으악!")
+			_number(e["pos"] + Vector3(0, 1.2, 0), 0, false, tr("으악!"))
 			e["hp"] = 0.0
 			_kill_enemy(e)
 			continue
@@ -2646,13 +2652,13 @@ var gacha_mesh: ArrayMesh
 func _use_gacha(d: Dictionary) -> void:
 	var cost: int = d["cost"]
 	if run_coins < cost:
-		_banner("동전이 모자라요 (%d개 필요)" % cost, Color("#ff9a2f"))
+		_banner(tr("동전이 모자라요 (%d개 필요)") % cost, Color("#ff9a2f"))
 		_play("ui_error", 1.0, -4.0)
 		return
 	run_coins -= cost
 	gacha_used += 1
 	d["cost"] = int(round(cost * 1.5))
-	(d["label"] as Label3D).text = "뽑기 동전 %d" % d["cost"]
+	(d["label"] as Label3D).text = tr("뽑기 동전 %d") % d["cost"]
 	var r := rng.randf()
 	var got: Array = []
 	var extra: Array = []
@@ -2667,20 +2673,20 @@ func _use_gacha(d: Dictionary) -> void:
 			var c2: Dictionary = pool2[rng.randi() % pool2.size()]
 			got.append(c2)
 			_apply_card(c2, true)
-			extra.append("한 개 더 나왔다!")
+			extra.append(tr("한 개 더 나왔다!"))
 	elif r < 0.75:
 		hp = max_hp()
-		extra.append("하트 가득 회복!")
+		extra.append(tr("하트 가득 회복!"))
 		_refresh_ui()
 	elif r < 0.88:
 		for g in gems:
 			g["pull"] = true
-		extra.append("왕자석! 딱지가 다 모여요")
+		extra.append(tr("왕자석! 딱지가 다 모여요"))
 	else:
 		coins = cost * 3
 		run_coins += coins
-		extra.append("동전 대박!")
-	_reward_panel("뽑기 결과!", got, coins, extra)
+		extra.append(tr("동전 대박!"))
+	_reward_panel(tr("뽑기 결과!"), got, coins, extra)
 
 func _drop(kind: String, pos: Vector3) -> void:
 	pos.x = clampf(pos.x, -AX + 0.4, AX - 0.4)
@@ -2710,7 +2716,7 @@ func _drop(kind: String, pos: Vector3) -> void:
 		lb.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		lb.pixel_size = 0.01
 		lb.position = Vector3(0, 2.0, 0)
-		lb.text = "뽑기 동전 %d" % d["cost"]
+		lb.text = tr("뽑기 동전 %d") % d["cost"]
 		mi.add_child(lb)
 		d["label"] = lb
 	drops.append(d)
@@ -2749,7 +2755,7 @@ func _update_drops(dt: float) -> void:
 				for g in gems:
 					g["pull"] = true
 				_play("magnet", 1.0, -3.0)
-				_banner("자석! 딱지가 다 모여요", Color("#ff7a7a"))
+				_banner(tr("자석! 딱지가 다 모여요"), Color("#ff7a7a"))
 			mi.queue_free()
 			drops.erase(d)
 		elif d["t"] > 25.0 and d["kind"] != "chest":
@@ -3708,7 +3714,7 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 		hurt_timer = 1.0
 		_ring(player.position, Color(1.0, 0.45, 0.6, 1.0), 0.5, 3.0, 0.45)
 		_sparkle(player.position + Vector3(0, 1, 0), Color(1.0, 0.6, 0.75, 1.0), 14, 6.0, 0.14, 0.5)
-		_number(player.position + Vector3(0, 2.0, 0), 0, true, "막았다!")
+		_number(player.position + Vector3(0, 2.0, 0), 0, true, tr("막았다!"))
 		_play("pop", 1.4, -6.0)
 		_vib(40)
 		return
@@ -3731,7 +3737,7 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 		revives -= 1
 		hp = maxi(2, max_hp() / 2)
 		hurt_timer = 2.5
-		_banner("오뚝이 부활!", Color("#c9a8f0"))
+		_banner(tr("오뚝이 부활!"), Color("#c9a8f0"))
 		_play("evo", 1.2, -2.0)
 		for e in enemies:
 			var d: Vector3 = e["pos"] - player.position
@@ -4061,7 +4067,7 @@ func _make_ui() -> void:
 	timer_label.offset_top = 24
 	hearts_label = _label("", 40, Color("#ff5c7a"), hud)
 	hearts_label.position = Vector2(24, 64)
-	kill_label = _label("귀신 0", 34, Color.WHITE, hud)
+	kill_label = _label(tr("귀신 0"), 34, Color.WHITE, hud)
 	kill_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	kill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	kill_label.offset_left = -260
@@ -4074,7 +4080,7 @@ func _make_ui() -> void:
 	combo_label.offset_right = 200
 	combo_label.offset_top = 200
 	combo_label.pivot_offset = Vector2(200, 30)
-	coin_label = _label("동전 0", 30, Color("#ffd23f"), hud)
+	coin_label = _label(tr("동전 0"), 30, Color("#ffd23f"), hud)
 	coin_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	coin_label.offset_left = -260
@@ -4125,10 +4131,10 @@ func _set_lines() -> Array:
 		var d: Dictionary = MAINS[id]
 		var pn: String = SUPPORTS[d["partner"]]["name"]
 		if evolved.has(id):
-			out.append(["%s 진화 완료!" % d["evo"], Color("#ffd23f")])
+			out.append([tr("%s 진화 완료!") % d["evo"], Color("#ffd23f")])
 		elif mains.has(id):
 			var have := supports.has(d["partner"])
-			out.append(["%s Lv.%d/5 + %s %s" % [d["name"], mains[id], pn, "(있어요)" if have else "(필요)"], Color("#6ee0b0") if have else Color.WHITE])
+			out.append(["%s Lv.%d/5 + %s %s" % [d["name"], mains[id], pn, tr("(있어요)") if have else tr("(필요)")], Color("#6ee0b0") if have else Color.WHITE])
 		else:
 			out.append(["%s + %s = %s" % [d["name"], pn, d["evo"]], Color(1, 1, 1, 0.5)])
 	return out
@@ -4147,14 +4153,14 @@ func _pause_menu() -> void:
 	dim.color = Color(0.1, 0.05, 0.15, 0.6)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	card_panel.add_child(dim)
-	var t := _label("잠깐 쉬어요", 60, Color.WHITE, card_panel)
+	var t := _label(tr("잠깐 쉬어요"), 60, Color.WHITE, card_panel)
 	t.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.offset_left = -300
 	t.offset_right = 300
 	t.offset_top = -500
 	t.offset_bottom = -420
-	var sl := _label("세트 진화표", 36, Color("#ffdf3d"), card_panel, 9)
+	var sl := _label(tr("세트 진화표"), 36, Color("#ffdf3d"), card_panel, 9)
 	sl.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sl.offset_left = -330
@@ -4170,7 +4176,7 @@ func _pause_menu() -> void:
 		ll.offset_right = 340
 		ll.offset_top = -350 + i * 40
 		ll.offset_bottom = -312 + i * 40
-	var go := _small_btn("계속하기", Color("#4fa8e8"), 44)
+	var go := _small_btn(tr("계속하기"), Color("#4fa8e8"), 44)
 	go.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	go.offset_left = -170
 	go.offset_right = 170
@@ -4178,7 +4184,7 @@ func _pause_menu() -> void:
 	go.offset_bottom = 0
 	card_panel.add_child(go)
 	_arm(go, 0.3)
-	var stb := _small_btn("설정", Color("#8a7a95"), 36)
+	var stb := _small_btn(tr("설정"), Color("#8a7a95"), 36)
 	stb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	stb.offset_left = -170
 	stb.offset_right = 170
@@ -4190,7 +4196,7 @@ func _pause_menu() -> void:
 		card_panel.queue_free()
 		card_panel = null
 		paused = false)
-	var q := _small_btn("그만하고 나가기", Color("#e8524a"), 36)
+	var q := _small_btn(tr("그만하고 나가기"), Color("#e8524a"), 36)
 	q.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	q.offset_left = -170
 	q.offset_right = 170
@@ -4200,7 +4206,7 @@ func _pause_menu() -> void:
 	q.pressed.connect(func():
 		if not q.has_meta("armed"):
 			q.set_meta("armed", true)
-			q.text = "정말 나갈까요? 한 번 더!"
+			q.text = tr("정말 나갈까요? 한 번 더!")
 			return
 		card_panel.queue_free()
 		card_panel = null
@@ -4223,26 +4229,26 @@ func _open_settings() -> void:
 	box_p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	box_p.offset_left = -300
 	box_p.offset_right = 300
-	box_p.offset_top = -430
-	box_p.offset_bottom = 430
+	box_p.offset_top = -480 if in_menu else -430
+	box_p.offset_bottom = 480 if in_menu else 430
 	root.add_child(box_p)
-	var t := _label("설정", 56, Color("#3a2148"), box_p, 0)
+	var t := _label(tr("설정"), 56, Color("#3a2148"), box_p, 0)
 	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.offset_top = 30
-	var items := [["bgm", "배경음악"], ["sfx", "효과음"], ["vib", "진동"], ["shake", "화면 흔들림"], ["nums", "데미지 숫자"], ["fx", "화려한 이펙트"]]
+	var items := [["bgm", tr("배경음악")], ["sfx", tr("효과음")], ["vib", tr("진동")], ["shake", tr("화면 흔들림")], ["nums", tr("데미지 숫자")], ["fx", tr("화려한 이펙트")]]
 	for i in items.size():
 		var key: String = items[i][0]
 		var l := _label(items[i][1], 40, Color("#3a2148"), box_p, 0)
 		l.position = Vector2(50, 130 + i * 100)
-		var b := _small_btn("켜짐" if Save.opt(key) else "꺼짐", Color("#2fc79a") if Save.opt(key) else Color("#b9b0bf"), 34)
+		var b := _small_btn(tr("켜짐") if Save.opt(key) else tr("꺼짐"), Color("#2fc79a") if Save.opt(key) else Color("#b9b0bf"), 34)
 		b.position = Vector2(370, 118 + i * 100)
 		b.size = Vector2(180, 80)
 		box_p.add_child(b)
 		b.pressed.connect(func():
 			var v := not Save.opt(key)
 			Save.set_opt(key, v)
-			b.text = "켜짐" if v else "꺼짐"
+			b.text = tr("켜짐") if v else tr("꺼짐")
 			var st := _round_panel(Color("#2fc79a") if v else Color("#b9b0bf"), 26, Color("#3a2148"), 5)
 			b.add_theme_stylebox_override("normal", st)
 			b.add_theme_stylebox_override("hover", st)
@@ -4250,7 +4256,19 @@ func _open_settings() -> void:
 			if key == "bgm" and bgm:
 				bgm.volume_db = -9.0 if v else -80.0
 			_play("pick", 1.0, -3.0))
-	var close := _small_btn("닫기", Color("#4fa8e8"), 40)
+	if in_menu:
+		# 언어는 메뉴에서만 바꿔요 (바꾸면 화면을 새로 불러와요). 어느 언어에서도 찾을 수 있게 두 말을 같이 써요.
+		var ll := _label("Language / 언어", 34, Color("#3a2148"), box_p, 0)
+		ll.position = Vector2(50, 130 + items.size() * 100 + 6)
+		var lb := _small_btn("한국어" if Save.lang() == "ko" else "English", Color("#7fa8ff"), 34)
+		lb.position = Vector2(370, 118 + items.size() * 100)
+		lb.size = Vector2(180, 80)
+		box_p.add_child(lb)
+		lb.pressed.connect(func():
+			_play("ui_toggle", 1.0, -4.0)
+			Save.set_lang("en" if Save.lang() == "ko" else "ko")
+			get_tree().reload_current_scene())
+	var close := _small_btn(tr("닫기"), Color("#4fa8e8"), 40)
 	close.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	close.offset_left = -150
 	close.offset_right = 150
@@ -4300,7 +4318,7 @@ func _banner(text: String, col: Color) -> void:
 func _update_hud() -> void:
 	var left := maxf(0.0, boss_time - elapsed)
 	if boss_spawned:
-		timer_label.text = "보스전!"
+		timer_label.text = tr("보스전!")
 	else:
 		timer_label.text = "%d:%02d" % [int(left) / 60, int(left) % 60]
 	if banner_label:
@@ -4331,14 +4349,14 @@ func _update_hud() -> void:
 			bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		boss_bar.size.x = 508.0 * clampf(boss["hp"] / boss["max_hp"], 0, 1)
 	xp_bar.size.x = xp_bar_bg.size.x * float(xp) / float(xp_need)
-	kill_label.text = "귀신 %d" % kills
-	coin_label.text = "동전 %d" % run_coins
+	kill_label.text = tr("귀신 %d") % kills
+	coin_label.text = tr("동전 %d") % run_coins
 	for c in slot_box.get_children():
 		if c.has_meta("ready"):
 			(c as Control).modulate = Color(1, 1, 1).lerp(Color(1.6, 1.4, 0.6), 0.5 + 0.5 * sin(elapsed * 8.0))
 	if combo >= 5:
 		var cm := combo_mult()
-		combo_label.text = "%d 콤보!" % combo + ("\n피해 x%.2f" % cm if cm > 1.0 else "")
+		combo_label.text = tr("%d 콤보!") % combo + (tr("\n피해 x%.2f") % cm if cm > 1.0 else "")
 		combo_label.add_theme_color_override("font_color", Color("#ffdf3d").lerp(Color("#ff5c7a"), clampf((cm - 1.0) / 0.6, 0, 1)))
 		combo_label.modulate.a = minf(1.0, clampf(combo_timer / 1.6, 0, 1) * 3.0)
 		combo_label.scale = Vector2.ONE * (1.0 + maxf(0.0, combo_timer - 1.45) * 3.0)
@@ -4421,7 +4439,7 @@ func _show_cards(pick: Array) -> void:
 	dim.color = Color(0.1, 0.05, 0.15, 0.6)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	card_panel.add_child(dim)
-	var title := _label("세트 완성! 진화!" if is_evo else "레벨 업!  하나 골라요", 58, Color("#ffdf3d"), card_panel)
+	var title := _label(tr("세트 완성! 진화!") if is_evo else tr("레벨 업!  하나 골라요"), 58, Color("#ffdf3d"), card_panel)
 	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.offset_left = -340
@@ -4446,14 +4464,14 @@ func _show_cards(pick: Array) -> void:
 		tw.tween_property(b, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	if first_card:
 		Save.tut_mark("card")
-		var hint := _label("같은 장난감을 Lv.5까지 키우고\n세트 짝꿍 보조를 모으면 진화해요!", 34, Color.WHITE, card_panel, 10)
+		var hint := _label(tr("같은 장난감을 Lv.5까지 키우고\n세트 짝꿍 보조를 모으면 진화해요!"), 34, Color.WHITE, card_panel, 10)
 		hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		hint.offset_left = -340
 		hint.offset_right = 340
 		hint.offset_top = 290
 	if rerolls > 0 and not is_evo:
-		var rb := _small_btn("다시 뽑기 (%d)" % rerolls, Color("#58c6f2"))
+		var rb := _small_btn(tr("다시 뽑기 (%d)") % rerolls, Color("#58c6f2"))
 		rb.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 		rb.offset_left = -170
 		rb.offset_right = 170
@@ -4508,7 +4526,7 @@ func _make_card(c: Dictionary) -> Button:
 			var d: Dictionary = MAINS[c["id"]]
 			nm_t = d["evo"]
 			desc = d["evo_desc"]
-			tag = "진화!"
+			tag = tr("진화!")
 			icon = d["icon"]
 			col = Color("#ffc928")
 			setline = "%s Lv.5 + %s" % [d["name"], SUPPORTS[d["partner"]]["name"]]
@@ -4518,26 +4536,26 @@ func _make_card(c: Dictionary) -> Button:
 			var cur: int = mains.get(c["id"], 0)
 			nm_t = d["name"]
 			desc = d["desc"][cur]
-			tag = "새로!" if cur == 0 else "Lv.%d > %d" % [cur, cur + 1]
+			tag = tr("새로!") if cur == 0 else "Lv.%d > %d" % [cur, cur + 1]
 			icon = d["icon"]
 			col = Color(d["col"])
 			var pn: String = SUPPORTS[d["partner"]]["name"]
-			setline = "세트 짝꿍: %s%s" % [pn, "  (있어요!)" if supports.has(d["partner"]) else ""]
+			setline = tr("세트 짝꿍: %s%s") % [pn, tr("  (있어요!)") if supports.has(d["partner"]) else ""]
 		"sup":
 			var d: Dictionary = SUPPORTS[c["id"]]
 			var cur: int = supports.get(c["id"], 0)
 			nm_t = d["name"]
 			desc = d["desc"]
-			tag = "새로!" if cur == 0 else "Lv.%d > %d" % [cur, cur + 1]
+			tag = tr("새로!") if cur == 0 else "Lv.%d > %d" % [cur, cur + 1]
 			icon = d["icon"]
 			col = Color(d["col"])
 			if d["set"] != "":
-				setline = "세트 짝꿍: %s%s" % [MAINS[d["set"]]["name"], "  (있어요!)" if mains.has(d["set"]) else ""]
+				setline = tr("세트 짝꿍: %s%s") % [MAINS[d["set"]]["name"], tr("  (있어요!)") if mains.has(d["set"]) else ""]
 			else:
-				setline = "보조 아이템"
+				setline = tr("보조 아이템")
 		"heal":
-			nm_t = "뽀빠이 과자"
-			desc = "하트 2칸 회복"
+			nm_t = tr("뽀빠이 과자")
+			desc = tr("하트 2칸 회복")
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(600, 210)
 	var bg := Color("#fff1b8") if gold else Color("#fff8e8")
@@ -4549,7 +4567,7 @@ func _make_card(c: Dictionary) -> Button:
 	_badge(b, icon, col, 120, Vector2(24, 45), gold)
 	var nm := _label(nm_t, 44, Color("#3a2148"), b, 0)
 	nm.position = Vector2(168, 26)
-	var tg := _label(tag, 30, Color("#e8524a") if tag == "새로!" or gold else Color("#8a7a95"), b, 0)
+	var tg := _label(tag, 30, Color("#e8524a") if tag == tr("새로!") or gold else Color("#8a7a95"), b, 0)
 	tg.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	tg.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tg.offset_left = -220
@@ -4560,7 +4578,7 @@ func _make_card(c: Dictionary) -> Button:
 	ds.size = Vector2(410, 70)
 	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if setline != "":
-		var sl := _label(setline, 24, Color("#d08a00") if setline.contains("있어요") or gold else Color("#9b8aa5"), b, 0)
+		var sl := _label(setline, 24, Color("#d08a00") if setline.contains(tr("있어요")) or gold else Color("#9b8aa5"), b, 0)
 		sl.position = Vector2(168, 162)
 	b.pressed.connect(func(): _apply_card(c))
 	return b
@@ -4609,7 +4627,7 @@ func _open_chest() -> void:
 		_apply_card(c, true)
 	var cc := int(round((5 + 3 * n) * coin_mult()))
 	run_coins += cc
-	_reward_panel("보물 상자!" if n == 1 else "대박! 보물 3개!", got, cc, [])
+	_reward_panel(tr("보물 상자!") if n == 1 else tr("대박! 보물 3개!"), got, cc, [])
 
 func _reward_panel(title_t: String, got: Array, cc: int, extra: Array) -> void:
 	_play("evo", 1.1, -3.0)
@@ -4665,9 +4683,9 @@ func _reward_panel(title_t: String, got: Array, cc: int, extra: Array) -> void:
 		var el := _label(ex, 44, Color.WHITE, vb, 10)
 		el.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if cc > 0:
-		var cl := _label("동전 +%d" % cc, 40, Color("#ffd23f"), vb)
+		var cl := _label(tr("동전 +%d") % cc, 40, Color("#ffd23f"), vb)
 		cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var ok := _small_btn("좋아!", Color("#ff9a2f"), 44)
+	var ok := _small_btn(tr("좋아!"), Color("#ff9a2f"), 44)
 	ok.custom_minimum_size = Vector2(300, 100)
 	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vb.add_child(ok)
@@ -4678,11 +4696,11 @@ func _reward_panel(title_t: String, got: Array, cc: int, extra: Array) -> void:
 		paused = false)
 
 func _card_info(c: Dictionary) -> Dictionary:
-	var info := {"name": "뽀빠이 과자", "desc": "하트 2칸 회복", "tag": "", "icon": "♥", "col": Color("#ff5c7a"), "gold": false}
+	var info := {"name": tr("뽀빠이 과자"), "desc": tr("하트 2칸 회복"), "tag": "", "icon": "♥", "col": Color("#ff5c7a"), "gold": false}
 	match c["type"]:
 		"evo":
 			var d: Dictionary = MAINS[c["id"]]
-			info = {"name": d["evo"], "desc": d["evo_desc"], "tag": "진화!", "icon": d["icon"], "col": Color("#ffc928"), "gold": true}
+			info = {"name": d["evo"], "desc": d["evo_desc"], "tag": tr("진화!"), "icon": d["icon"], "col": Color("#ffc928"), "gold": true}
 		"main":
 			var d: Dictionary = MAINS[c["id"]]
 			var cur: int = mains.get(c["id"], 0)
@@ -4753,7 +4771,7 @@ func _evo_cinematic(id: String) -> void:
 	var bt := badge.create_tween()
 	bt.tween_property(badge, "scale", Vector2(1.3, 1.3), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	bt.tween_property(badge, "scale", Vector2.ONE, 0.2)
-	var t1 := _label("진화!", 120, Color("#ffdf3d"), root, 22)
+	var t1 := _label(tr("진화!"), 120, Color("#ffdf3d"), root, 22)
 	t1.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t1.offset_left = -360
@@ -4933,21 +4951,21 @@ func _end_game(win: bool) -> void:
 	box_p.offset_top = -420
 	box_p.offset_bottom = 420
 	end_panel.add_child(box_p)
-	var t := _label("대왕귀신을 물리쳤다!" if win else Save.CHARS[char_id]["name"] + "가 기절했어요", 52, Color("#ffdf3d") if win else Color("#ff7aa8"), box_p)
+	var t := _label(tr("대왕귀신을 물리쳤다!") if win else Save.CHARS[char_id]["name"] + tr("가 기절했어요"), 52, Color("#ffdf3d") if win else Color("#ff7aa8"), box_p)
 	t.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.offset_top = 46
 	var evo_names: Array = []
 	for id in evolved:
 		evo_names.append(MAINS[id]["evo"])
-	var lines := "버틴 시간  %d:%02d\n물리친 귀신  %d마리\n레벨  %d\n진화  %s\n\n동전 +%d%s" % [int(elapsed) / 60, int(elapsed) % 60, kills, level,
-		", ".join(evo_names) if evo_names.size() > 0 else "아직 없어요", run_coins, ("  (보너스 %d 포함)" % bonus) if bonus > 0 else ""]
+	var lines := tr("버틴 시간  %d:%02d\n물리친 귀신  %d마리\n레벨  %d\n진화  %s\n\n동전 +%d%s") % [int(elapsed) / 60, int(elapsed) % 60, kills, level,
+		", ".join(evo_names) if evo_names.size() > 0 else tr("아직 없어요"), run_coins, (tr("  (보너스 %d 포함)") % bonus) if bonus > 0 else ""]
 	if not auto_play and shot_mode == "":
 		var af := Save.affordable()
 		if af.size() > 0:
-			lines += "\n\n문방구에서 '%s' 살 수 있어요!" % af[0]["name"]
+			lines += tr("\n\n문방구에서 '%s' 살 수 있어요!") % af[0]["name"]
 	if weekly:
-		lines += "\n\n주간 도전 점수 %d (이번 주 최고 %d)" % [result["score"], Save.weekly_best()]
+		lines += tr("\n\n주간 도전 점수 %d (이번 주 최고 %d)") % [result["score"], Save.weekly_best()]
 	for n in rec["news"]:
 		lines += "\n★ " + n
 	var s := _label(lines, 32, Color("#3a2148"), box_p, 0)
@@ -4958,7 +4976,7 @@ func _end_game(win: bool) -> void:
 	s.offset_left = 20
 	s.offset_right = -20
 	var b := Button.new()
-	b.text = "한 판 더!"
+	b.text = tr("한 판 더!")
 	b.add_theme_font_override("font", font)
 	b.add_theme_font_size_override("font_size", 44)
 	b.add_theme_color_override("font_color", Color.WHITE)
@@ -4974,7 +4992,7 @@ func _end_game(win: bool) -> void:
 	b.offset_bottom = -44
 	box_p.add_child(b)
 	b.pressed.connect(func(): get_tree().reload_current_scene())
-	var hb := _small_btn("메인으로", Color("#ff9a2f"), 40)
+	var hb := _small_btn(tr("메인으로"), Color("#ff9a2f"), 40)
 	hb.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	hb.offset_left = 10
 	hb.offset_right = 250
@@ -4985,17 +5003,17 @@ func _end_game(win: bool) -> void:
 		Save.mode = "menu"
 		get_tree().reload_current_scene())
 	if weekly:
-		var sh := _small_btn("결과 복사해서 자랑하기", Color("#2fc79a"), 30)
+		var sh := _small_btn(tr("결과 복사해서 자랑하기"), Color("#2fc79a"), 30)
 		sh.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 		sh.offset_left = -250
 		sh.offset_right = 250
 		sh.offset_top = -250
 		sh.offset_bottom = -160
 		box_p.add_child(sh)
-		var txt := "[문방구 퇴마단 주간 도전 %d주차] %s %s로 %d점! 귀신 %d마리, %d:%02d 버팀" % [Save.week_id() % 100, Save.STAGES[stage]["name"], Save.CHARS[char_id]["name"], result["score"], kills, int(elapsed) / 60, int(elapsed) % 60]
+		var txt := tr("[문방구 퇴마단 주간 도전 %d주차] %s %s로 %d점! 귀신 %d마리, %d:%02d 버팀") % [Save.week_id() % 100, Save.STAGES[stage]["name"], Save.CHARS[char_id]["name"], result["score"], kills, int(elapsed) / 60, int(elapsed) % 60]
 		sh.pressed.connect(func():
 			DisplayServer.clipboard_set(txt)
-			sh.text = "복사했어요! 단톡방에 붙여 넣어요")
+			sh.text = tr("복사했어요! 단톡방에 붙여 넣어요"))
 
 # =========================================================
 # 소리
@@ -5171,7 +5189,7 @@ func _setup_shot() -> void:
 		boss = _make_enemy("boss", Vector3(0, 0, -4))
 		boss["scale"] *= boss_rank()["scale"]
 		boss["radius"] *= boss_rank()["scale"]
-		_banner(boss_name() + "이 와요!", Color("#ff7aa8"))
+		_banner(boss_name() + tr("이 와요!"), Color("#ff7aa8"))
 		boss["pat"] = "shoes"
 		boss["pat_t"] = 0.9
 		boss["stage"] = 0
