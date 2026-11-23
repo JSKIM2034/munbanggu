@@ -225,6 +225,7 @@ const EN := {
 	"단계를 깰수록 힘센 친구가 와요!": "Clear stages to unlock stronger friends!",
 	"시작 무기: ": "Weapon: ",
 	"특기: ": "Perk: ",
+	"한번에 모두 받기 (%d개)": "Claim all (%d)",
 	"기본 피해 x%.1f": "Base damage x%.1f",
 	"%s\n(지금 %d단계)": "%s\n(now stage %d)",
 	"함께해요": "On the team",

@@ -442,6 +442,17 @@ func _friends() -> void:
 # ---------- 도장 숙제 ----------
 func _ach() -> void:
 	var vb := _page(tr("도장 숙제"))
+	var ready := Save.daily_claimable() + Save.ach_claimable()
+	if ready > 0:
+		var all_b := B(tr("한번에 모두 받기 (%d개)") % ready, Color("#ff9a2f"), 36)
+		all_b.custom_minimum_size = Vector2(0, 92)
+		main._fit(all_b, 560)
+		vb.add_child(all_b)
+		all_b.pressed.connect(func():
+			if Save.claim_all() > 0:
+				main._play("coin", 1.0, -2.0)
+				main._play("level", 1.0, -6.0)
+			show_screen("ach"))
 	var h1 := L(tr("오늘의 숙제 (매일 바뀌어요)"), 36, Color.WHITE, vb, 9)
 	for qid in Save.data["daily"]["ids"]:
 		var q := Save.daily_quest(qid)

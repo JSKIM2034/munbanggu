@@ -311,6 +311,16 @@ func claim_ach(id: String) -> int:
 	save_data()
 	return int(a["reward"])
 
+# 받을 수 있는 숙제와 도장 보상을 한꺼번에 받아요 (받은 동전 합계)
+func claim_all() -> int:
+	var total := 0
+	for id in data["daily"]["ids"].duplicate():
+		total += claim_daily(id)
+	total += claim_daily("bonus")
+	for a in ACH:
+		total += claim_ach(a["id"])
+	return total
+
 # 친구는 장소 단계를 깨면 한 명씩 와요
 func char_unlocked(id: String) -> bool:
 	var nd: Array = CHARS[id]["need"]
