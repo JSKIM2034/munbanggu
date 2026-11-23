@@ -3922,7 +3922,7 @@ func _process(delta: float) -> void:
 	_update_camera(dt)
 	_update_hud()
 	if auto_play and int(elapsed / 10.0) != int((elapsed - dt) / 10.0):
-		print(("BOSS%d " % int(boss["hp"]) if not boss.is_empty() else "") + "T%d kills=%d lv=%d hp=%d enemies=%d gems=%d parts=%d mains=%s sup=%s evo=%s" % [int(elapsed), kills, level, hp, enemies.size(), gems.size(), parts.size(), mains, supports, evolved.keys()])
+		print(("BOSS%d " % int(boss["hp"]) if not boss.is_empty() else "") + "T%d kills=%d lv=%d hp=%d enemies=%d gems=%d parts=%d mains=%s sup=%s evo=%s" % [int(elapsed), kills, level, hp, enemies.size(), gems.size(), parts.size(), mains, supports, evolved.keys()] + " snd=%d/%d" % snd_stat)
 
 var menu_t := 0.0
 func _menu_idle(dt: float) -> void:
@@ -5229,10 +5229,16 @@ func _make_sounds() -> void:
 		var path := "res://sfx/fx_%s.ogg" % nm
 		if ResourceLoader.exists(path):
 			sounds[nm] = load(path)
-	for i in 10:
+	for i in 16:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		players_audio.append(p)
+		player_snd.append("")
+	# 소리가 한꺼번에 많이 겹쳐도 찢어지지 않게 마지막에 살짝 눌러 줘요
+	if AudioServer.get_bus_effect_count(0) == 0:
+		var lim := AudioEffectHardLimiter.new()
+		lim.ceiling_db = -1.0
+		AudioServer.add_bus_effect(0, lim)
 
 func _play_bgm(track: String) -> void:
 	if auto_play or not ResourceLoader.exists("res://music/%s.ogg" % track):
@@ -5247,11 +5253,41 @@ func _vib(ms: int) -> void:
 	if Save.opt("vib"):
 		Input.vibrate_handheld(ms)
 
+# 자주 나는 소리: 같은 소리는 이 간격(밀리초)보다 촘촘히 내지 않고, 자리가 모자라면 이 소리부터 비켜요
+const SND_GAP := {"hit": 55, "gem": 45, "shoot": 70, "coin": 60, "pop": 70, "splash": 90, "zap": 80, "blast": 90,
+	"rubber": 90, "kick": 90, "magnet": 150, "yoyo": 80}
+var player_snd: Array = []
+var snd_last := {}
+var snd_stat := [0, 0]   # 낸 소리, 건너뛴 소리 (봇 기록용)
 func _play(name: String, pitch := 1.0, db := 0.0) -> void:
 	if not sounds.has(name) or not Save.opt("sfx"):
 		return
-	var p: AudioStreamPlayer = players_audio[audio_i]
-	audio_i = (audio_i + 1) % players_audio.size()
+	var minor := SND_GAP.has(name)
+	var now := Time.get_ticks_msec()
+	if minor and now - int(snd_last.get(name, -99999)) < int(SND_GAP[name]):
+		snd_stat[1] += 1
+		return
+	# 쉬고 있는 자리를 먼저 찾고, 없으면 자주 나는 소리 자리를 빌려요 (큰 소리는 끊지 않아요)
+	var pick := -1
+	for k in players_audio.size():
+		var j := (audio_i + k) % players_audio.size()
+		if not (players_audio[j] as AudioStreamPlayer).playing:
+			pick = j
+			break
+	if pick < 0:
+		for k in players_audio.size():
+			var j := (audio_i + k) % players_audio.size()
+			if SND_GAP.has(player_snd[j]):
+				pick = j
+				break
+	if pick < 0:
+		snd_stat[1] += 1
+		return
+	snd_last[name] = now
+	snd_stat[0] += 1
+	audio_i = (pick + 1) % players_audio.size()
+	player_snd[pick] = name
+	var p: AudioStreamPlayer = players_audio[pick]
 	p.stream = sounds[name]
 	# 자주 나는 소리는 높낮이를 살짝 흔들어서 덜 질리게
 	if name in ["hit", "blast", "gem", "shoot", "coin", "pop"]:
