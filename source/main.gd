@@ -1702,8 +1702,8 @@ func ease_boss() -> float:
 	return lerpf(EASE_BOSS0, 1.0, ease_x())
 func ease_hp_for(d: int) -> float:
 	return lerpf(EASE_HP0, 1.0, clampf((d - 1) / 9.0, 0.0, 1.0))
-const EASE_HP0 := 0.6
-const EASE_SPAWN0 := 0.75
+const EASE_HP0 := 0.45
+const EASE_SPAWN0 := 1.0   # 귀신 수는 줄이지 않아요 (초반이 너무 비어 보여서)
 const EASE_BOSS0 := 0.3
 
 func grade_hp() -> float:
@@ -1856,7 +1856,7 @@ func _spawn_logic(dt: float) -> void:
 		return
 	var t := elapsed / RUN_TIME
 	spawn_timer = lerpf(1.1, 0.3, clampf(t * 1.3, 0, 1))
-	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4) * weather_spawn() * ease_spawn())
+	var count := maxi(1, int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4) * weather_spawn() * ease_spawn()))
 	if boss_spawned:
 		count = maxi(1, count / 3)
 	# 시간이 지날수록 센 귀신이 섞여요
