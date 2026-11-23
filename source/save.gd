@@ -194,7 +194,7 @@ func trd(v: Variant) -> Variant:
 
 func _default() -> Dictionary:
 	return {"coins": 0, "shop": {}, "char": "chulsoo", "clears": {}, "stats": {}, "ach_claimed": [],
-		"bestiary": {}, "daily": {}, "best": {}, "runs": 0, "seen_unlock": [], "tut": {},
+		"bestiary": {}, "daily": {}, "best": {}, "runs": 0, "seen_unlock": [], "tut": {}, "evo_v": 1,
 		"opt": {"bgm": true, "sfx": true, "vib": true, "shake": true, "nums": true, "fx": true}}
 
 func opt(key: String) -> bool:
@@ -227,6 +227,10 @@ func load_data() -> void:
 		if d is Dictionary:
 			for k in d:
 				data[k] = d[k]
+			# 진화 비법이 생기기 전 저장: 이미 진화해 본 사람은 비법을 모두 열어 둬요
+			if not d.has("evo_v"):
+				data["evo_legacy"] = int(data["stats"].get("evos_total", 0)) > 0
+				data["evo_v"] = 1
 	if not CHARS.has(data["char"]) or not char_unlocked(data["char"]):
 		data["char"] = "chulsoo"
 	_refresh_daily()
@@ -310,6 +314,35 @@ func claim_ach(id: String) -> int:
 	data["coins"] += int(a["reward"])
 	save_data()
 	return int(a["reward"])
+
+# ---------- 진화 비법 ----------
+# 처음엔 진화가 잠겨 있고, 단계를 깰수록(모든 장소의 깬 단계 합) 하나씩 열려요
+const EVO_ORDER := ["gun", "ddakji", "plane", "yoyo", "pop", "rubber"]
+const EVO_NEED := [1, 3, 5, 7, 10, 13]
+var evo_all := false   # 스크린샷/시험용: 모두 열기
+
+func clear_total() -> int:
+	var n := 0
+	for k in data["clears"]:
+		n += int(data["clears"][k])
+	return n
+
+func evo_need(id: String) -> int:
+	var i := EVO_ORDER.find(id)
+	return EVO_NEED[i] if i >= 0 else 0
+
+func evo_open(id: String) -> bool:
+	return evo_all or data.get("evo_legacy", false) or clear_total() >= evo_need(id)
+
+func evo_open_list() -> Array:
+	var out: Array = []
+	for id in EVO_ORDER:
+		if evo_open(id):
+			out.append(id)
+	return out
+
+func evo_need_text(id: String) -> String:
+	return tr("진화 비법 잠김: 단계를 %d번 깨면 열려요 (지금 %d번)") % [evo_need(id), clear_total()]
 
 # 받을 수 있는 숙제와 도장 보상을 한꺼번에 받아요 (받은 동전 합계)
 func claim_all() -> int:

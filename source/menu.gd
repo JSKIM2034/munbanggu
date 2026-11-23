@@ -521,10 +521,11 @@ func _book() -> void:
 		var nm := L("%s Lv.5 + %s" % [d["name"], sd[d["partner"]]["name"]], 34, INK, row)
 		nm.position = Vector2(140, 16)
 		main._fit(nm, 490)
-		var ev := L("= " + d["evo"], 32, Color("#d08a00"), row)
+		var op: bool = Save.evo_open(id) or id == Save.CHARS[Save.data["char"]]["weapon"]
+		var ev := L("= " + d["evo"] + ("" if op else "  " + tr("(잠김)")), 32, Color("#d08a00") if op else Color("#9b8aa5"), row)
 		ev.position = Vector2(140, 62)
 		main._fit(ev, 490)
-		var ds := L(d["evo_desc"], 22, SUB, row)
+		var ds := L(d["evo_desc"] if op else Save.evo_need_text(id), 22, SUB if op else Color("#c0506a"), row)
 		ds.position = Vector2(140, 104)
 		main._fit_box(ds, 490, 40)
 	var tip := L(tr("만난 귀신 %d / %d") % [total, Save.BESTIARY.size()], 30, Color.WHITE, vb, 8)

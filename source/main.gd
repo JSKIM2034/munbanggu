@@ -230,6 +230,8 @@ func _ready() -> void:
 		rng.seed = 7
 	if args.has("--weekly"):
 		Save.run_cfg["weekly"] = true
+	if args.has("--meta") or (shot_mode != "" and not args.has("--menu")) or args.has("--evoall"):
+		Save.evo_all = true
 	if args.has("--meta"):
 		Save.data["shop"] = {"dmg": 4, "hp": 2, "speed": 2, "magnet": 2, "xp": 2, "luck": 1, "reroll": 1, "revive": 1}
 	if args.has("--menu"):
@@ -1785,7 +1787,20 @@ func pop_stats() -> Dictionary:
 	return d
 
 func evo_ready(id: String) -> bool:
-	return mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id)
+	return mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id) and evo_open(id)
+
+# 진화 비법: 내 친구의 시작 무기 비법은 처음부터 알고, 나머지는 단계를 깨면 열려요
+func evo_open(id: String) -> bool:
+	return Save.evo_open(id) or id == Save.CHARS[char_id]["weapon"]
+
+var evo_hint := {}
+func _evo_lock_hint() -> void:
+	# 세트는 모았는데 진화 비법이 잠겨 있으면 한 번 알려 줘요
+	for id in MAINS:
+		if mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id) and not evo_open(id) and not evo_hint.has(id):
+			evo_hint[id] = true
+			_banner(tr("%s 비법은 아직 잠겨 있어요!") % MAINS[id]["evo"] + "\n" + Save.evo_need_text(id), Color("#ffd23f"))
+			return
 
 # =========================================================
 # 귀신
@@ -4191,9 +4206,11 @@ func _set_lines() -> Array:
 			out.append([tr("%s 진화 완료!") % d["evo"], Color("#ffd23f")])
 		elif mains.has(id):
 			var have := supports.has(d["partner"])
-			out.append(["%s Lv.%d/5 + %s %s" % [d["name"], mains[id], pn, tr("(있어요)") if have else tr("(필요)")], Color("#6ee0b0") if have else Color.WHITE])
-		else:
+			out.append(["%s Lv.%d/5 + %s %s" % [d["name"], mains[id], pn, tr("(있어요)") if have else tr("(필요)")] + ("" if evo_open(id) else " " + tr("(잠김)")), Color("#6ee0b0") if have else Color.WHITE])
+		elif evo_open(id):
 			out.append(["%s + %s = %s" % [d["name"], pn, d["evo"]], Color(1, 1, 1, 0.5)])
+		else:
+			out.append(["%s + %s = %s %s" % [d["name"], pn, d["evo"], tr("(잠김)")], Color(1, 1, 1, 0.35)])
 	return out
 
 func _pause_menu() -> void:
@@ -4600,6 +4617,8 @@ func _make_card(c: Dictionary) -> Button:
 			col = Color(d["col"])
 			var pn: String = SUPPORTS[d["partner"]]["name"]
 			setline = tr("세트 짝꿍: %s%s") % [pn, tr("  (있어요!)") if supports.has(d["partner"]) else ""]
+			if not evo_open(c["id"]):
+				setline += tr("  (진화 잠김)")
 		"sup":
 			var d: Dictionary = SUPPORTS[c["id"]]
 			var cur: int = supports.get(c["id"], 0)
@@ -4665,6 +4684,7 @@ func _apply_card(c: Dictionary, from_chest := false) -> void:
 				hp = mini(max_hp(), hp + 1)
 		"heal":
 			hp = mini(max_hp(), hp + 2)
+	_evo_lock_hint()
 	if from_chest:
 		_refresh_ui()
 		_refresh_slots()
@@ -4992,7 +5012,11 @@ func _end_game(win: bool) -> void:
 		"score": kills + int(elapsed) * 3 + (3000 if win else 0)}
 	var rec := {"news": []}
 	if not auto_play and shot_mode == "":
+		var evo_before := Save.evo_open_list()
 		rec = Save.record_run(result)
+		for id in Save.evo_open_list():
+			if not evo_before.has(id):
+				rec["news"].append(tr("새 진화 비법: ") + MAINS[id]["evo"] + "!")
 	if auto_play:
 		print("END missions=%d " % missions_done + "stage=%s mod=%s gacha=%d coins=%d chests=%d elites=%d " % [stage, day_mod, gacha_used, run_coins, chests_opened, elites_killed] + "win=%s t=%d kills=%d lv=%d mains=%s sup=%s evo=%s" % [win, int(elapsed), kills, level, mains, supports, evolved.keys()])
 		get_tree().quit()
