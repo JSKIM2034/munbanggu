@@ -316,9 +316,9 @@ func claim_ach(id: String) -> int:
 	return int(a["reward"])
 
 # ---------- 진화 비법 ----------
-# 처음엔 진화가 잠겨 있고, 단계를 깰수록(모든 장소의 깬 단계 합) 하나씩 열려요
+# 내 친구의 시작 무기 비법은 처음부터 알아요. 나머지 5개는 단계를 깰수록(모든 장소의 깬 단계 합) 하나씩 열려요
 const EVO_ORDER := ["gun", "ddakji", "plane", "yoyo", "pop", "rubber"]
-const EVO_NEED := [1, 3, 5, 7, 10, 13]
+const EVO_NEED := [1, 3, 5, 7, 10]
 var evo_all := false   # 스크린샷/시험용: 모두 열기
 
 func clear_total() -> int:
@@ -327,22 +327,58 @@ func clear_total() -> int:
 		n += int(data["clears"][k])
 	return n
 
-func evo_need(id: String) -> int:
-	var i := EVO_ORDER.find(id)
-	return EVO_NEED[i] if i >= 0 else 0
+func own_weapon() -> String:
+	return CHARS[data["char"]]["weapon"]
 
-func evo_open(id: String) -> bool:
-	return evo_all or data.get("evo_legacy", false) or clear_total() >= evo_need(id)
+func evo_need(id: String, own := "") -> int:
+	if own == "":
+		own = own_weapon()
+	if id == own:
+		return 0
+	var rest: Array = EVO_ORDER.filter(func(x): return x != own)
+	var i := rest.find(id)
+	return EVO_NEED[i] if i >= 0 and i < EVO_NEED.size() else 0
 
-func evo_open_list() -> Array:
+func evo_open(id: String, own := "") -> bool:
+	return evo_all or data.get("evo_legacy", false) or clear_total() >= evo_need(id, own)
+
+func evo_open_list(own := "") -> Array:
 	var out: Array = []
 	for id in EVO_ORDER:
-		if evo_open(id):
+		if evo_open(id, own):
 			out.append(id)
 	return out
 
-func evo_need_text(id: String) -> String:
-	return tr("진화 비법 잠김: 단계를 %d번 깨면 열려요 (지금 %d번)") % [evo_need(id), clear_total()]
+# 다음에 열릴 진화 비법 (없으면 "")
+func next_evo(own := "") -> String:
+	var best := ""
+	for id in EVO_ORDER:
+		if not evo_open(id, own) and (best == "" or evo_need(id, own) < evo_need(best, own)):
+			best = id
+	return best
+
+func evo_need_text(id: String, own := "") -> String:
+	return tr("진화 비법 잠김: 단계를 %d번 깨면 열려요 (지금 %d번)") % [evo_need(id, own), clear_total()]
+
+# 이 장소의 이 단계를 처음 깨면 새로 열리는 것들 (글 목록)
+func first_clear_rewards(sid: String, grade: int, evo_names: Dictionary) -> Array:
+	var out: Array = []
+	var prev := int(data["clears"].get(sid, 0))
+	if grade != prev + 1:
+		return out
+	var total := clear_total() + 1
+	for id in EVO_ORDER:
+		if not evo_open(id) and evo_need(id) <= total:
+			out.append(tr("진화 비법 '%s'") % evo_names.get(id, id))
+	for c in CHAR_ORDER:
+		var nd: Array = CHARS[c]["need"]
+		if nd.size() == 2 and nd[0] == sid and int(nd[1]) == grade and not char_unlocked(c):
+			out.append(tr("새 친구 %s") % CHARS[c]["name"])
+	if grade == UNLOCK_GRADE:
+		for s in STAGE_ORDER:
+			if STAGES[s]["need"] == sid and not stage_unlocked(s):
+				out.append(tr("새 장소 %s") % STAGES[s]["name"])
+	return out
 
 # 받을 수 있는 숙제와 도장 보상을 한꺼번에 받아요 (받은 동전 합계)
 func claim_all() -> int:

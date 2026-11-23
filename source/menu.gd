@@ -317,10 +317,19 @@ func _stage() -> void:
 		if not best.is_empty():
 			rec = (tr("클리어 %d:%02d") if best.get("win", false) else tr("최고 %d:%02d 버팀")) % [int(best["time"]) / 60, int(best["time"]) % 60]
 		var g0: int = sel[sid] - 1
-		var hint := tr("  |  귀신 체력 x%.1f  동전 x%.1f") % [(1.0 + 0.45 * g0 + 0.02 * g0 * g0), 1.0 + 0.35 * g0]
+		var ez: float = main.ease_hp_for(g0 + 1) if sid == "ground" else 1.0
+		var hint := tr("  |  귀신 체력 x%.1f  동전 x%.1f") % [(1.0 + 0.45 * g0 + 0.02 * g0 * g0) * ez, 1.0 + 0.35 * g0]
 		var rl := L(rec + hint, 24, SUB, row)
 		rl.position = Vector2(30, 268)
 		main._fit(rl, 600)
+		var evn := {}
+		for wpn in main.mains_def():
+			evn[wpn] = main.mains_def()[wpn]["evo"]
+		var rw: Array = Save.first_clear_rewards(sid, sel[sid], evn)
+		if rw.size() > 0:
+			var rwl := L(tr("깨면 열려요: ") + ", ".join(rw), 26, Color("#e8524a"), row)
+			rwl.position = Vector2(30, 306)
+			main._fit_box(rwl, 400, 72)
 		var go := B(tr("출발!"), Color("#ff9a2f"), 40)
 		go.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 		go.offset_left = -230
@@ -521,7 +530,7 @@ func _book() -> void:
 		var nm := L("%s Lv.5 + %s" % [d["name"], sd[d["partner"]]["name"]], 34, INK, row)
 		nm.position = Vector2(140, 16)
 		main._fit(nm, 490)
-		var op: bool = Save.evo_open(id) or id == Save.CHARS[Save.data["char"]]["weapon"]
+		var op: bool = Save.evo_open(id)
 		var ev := L("= " + d["evo"] + ("" if op else "  " + tr("(잠김)")), 32, Color("#d08a00") if op else Color("#9b8aa5"), row)
 		ev.position = Vector2(140, 62)
 		main._fit(ev, 490)

@@ -226,6 +226,11 @@ func _ready() -> void:
 			Save.data["char"] = a.substr(7)
 		if a.begins_with("--seed="):
 			rng.seed = int(a.substr(7))
+		if a.begins_with("--clears="):
+			Save.data["clears"] = {"ground": int(a.substr(9))}   # 봇 시험용: 앞 단계를 깬 척
+		if a.begins_with("--shop="):
+			var sl := int(a.substr(7))   # 봇 시험용: 문방구 강화 단계
+			Save.data["shop"] = {"dmg": sl, "hp": sl / 2, "speed": sl / 2, "magnet": sl / 2, "xp": sl / 2, "w_gun": sl / 2, "w_ddakji": sl / 2}
 	if args.has("--seed"):
 		rng.seed = 7
 	if args.has("--weekly"):
@@ -1686,6 +1691,21 @@ func boss_rank() -> Dictionary:
 func boss_name() -> String:
 	return boss_rank()["pre"] + Save.STAGES[boss_stage()]["boss"]
 
+# 처음 단계는 순하게: 실제 난이도 1에서 10까지 차츰 원래 세기로 올라가요
+func ease_x() -> float:
+	return clampf((dg - 1) / 9.0, 0.0, 1.0)
+func ease_hp() -> float:
+	return lerpf(EASE_HP0, 1.0, ease_x())
+func ease_spawn() -> float:
+	return lerpf(EASE_SPAWN0, 1.0, ease_x())
+func ease_boss() -> float:
+	return lerpf(EASE_BOSS0, 1.0, ease_x())
+func ease_hp_for(d: int) -> float:
+	return lerpf(EASE_HP0, 1.0, clampf((d - 1) / 9.0, 0.0, 1.0))
+const EASE_HP0 := 0.6
+const EASE_SPAWN0 := 0.75
+const EASE_BOSS0 := 0.3
+
 func grade_hp() -> float:
 	var g := float(dg - 1)
 	return (1.0 + 0.45 * g + 0.02 * g * g) * STAGE_MULT[stage]
@@ -1791,7 +1811,7 @@ func evo_ready(id: String) -> bool:
 
 # 진화 비법: 내 친구의 시작 무기 비법은 처음부터 알고, 나머지는 단계를 깨면 열려요
 func evo_open(id: String) -> bool:
-	return Save.evo_open(id) or id == Save.CHARS[char_id]["weapon"]
+	return Save.evo_open(id, Save.CHARS[char_id]["weapon"])
 
 var evo_hint := {}
 func _evo_lock_hint() -> void:
@@ -1799,7 +1819,7 @@ func _evo_lock_hint() -> void:
 	for id in MAINS:
 		if mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id) and not evo_open(id) and not evo_hint.has(id):
 			evo_hint[id] = true
-			_banner(tr("%s 비법은 아직 잠겨 있어요!") % MAINS[id]["evo"] + "\n" + Save.evo_need_text(id), Color("#ffd23f"))
+			_banner(tr("%s 비법은 아직 잠겨 있어요!") % MAINS[id]["evo"] + "\n" + Save.evo_need_text(id, Save.CHARS[char_id]["weapon"]), Color("#ffd23f"))
 			return
 
 # =========================================================
@@ -1810,9 +1830,9 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 		return {}
 	var k: Dictionary = KINDS[kind]
 	var t := elapsed / RUN_TIME
-	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * grade_hp() * (1.0 + 0.35 * clampf(t * 2.0, 0.0, 1.0))
+	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * grade_hp() * (1.0 + 0.35 * clampf(t * 2.0, 0.0, 1.0)) * ease_hp()
 	if kind == "boss":
-		hpv = k["hp"] * grade_hp()
+		hpv = k["hp"] * grade_hp() * ease_boss()
 	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
 		"squash": 0.0, "phase": rng.randf() * TAU, "spawn": 0.0, "dead": -1.0, "slow": 0.0, "elite": elite,
 		"speed": k["speed"] * (1.0 + t * 0.3) * (1.0 + minf(0.4, 0.02 * (dg - 1))) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0) * weather_speed(), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
@@ -1836,7 +1856,7 @@ func _spawn_logic(dt: float) -> void:
 		return
 	var t := elapsed / RUN_TIME
 	spawn_timer = lerpf(1.1, 0.3, clampf(t * 1.3, 0, 1))
-	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4) * weather_spawn())
+	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4) * weather_spawn() * ease_spawn())
 	if boss_spawned:
 		count = maxi(1, count / 3)
 	# 시간이 지날수록 센 귀신이 섞여요
@@ -5012,9 +5032,10 @@ func _end_game(win: bool) -> void:
 		"score": kills + int(elapsed) * 3 + (3000 if win else 0)}
 	var rec := {"news": []}
 	if not auto_play and shot_mode == "":
-		var evo_before := Save.evo_open_list()
+		var own: String = Save.CHARS[char_id]["weapon"]
+		var evo_before := Save.evo_open_list(own)
 		rec = Save.record_run(result)
-		for id in Save.evo_open_list():
+		for id in Save.evo_open_list(own):
 			if not evo_before.has(id):
 				rec["news"].append(tr("새 진화 비법: ") + MAINS[id]["evo"] + "!")
 	if auto_play:
