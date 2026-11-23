@@ -453,6 +453,8 @@ func _prewarm() -> void:
 	y.position = Vector3(0, -0.5, 0)
 	add_child(y)
 	get_tree().create_timer(0.3).timeout.connect(y.queue_free)
+	var z := _make_zone(Vector3(0, -3.0, 0))
+	get_tree().create_timer(0.3).timeout.connect(z.queue_free)
 
 # =========================================================
 # 메시 만들기 도구: 조각들을 하나의 메시(정점 색)로 합쳐요
@@ -1912,7 +1914,111 @@ var boss: Dictionary = {}
 var boss_warned := false
 var mission := {}
 var mission_label: Label
-var mission_zone: MeshInstance3D
+var mission_zone: Node3D
+const ZONE_R := 2.2
+const ZONE_WALL_SH := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+uniform vec4 col : source_color = vec4(1.0, 0.85, 0.2, 1.0);
+uniform float t = 0.0;
+void fragment(){
+  float h = UV.y;            // 0 = 위, 1 = 바닥
+  float fade = pow(h, 2.2);
+  float stripe = 0.65 + 0.35 * sin((h * 9.0 + t * 2.5) * 3.14159);
+  ALBEDO = col.rgb;
+  ALPHA = clamp(fade * stripe * col.a, 0.0, 1.0);
+}
+"""
+
+# 숙제 검사 동그라미: 살짝 솟은 무대 + 무늬 있는 윗면(채워지는 초록 부채꼴) + 테두리 + 빛 기둥
+const ZONE_TOP_SH := """
+shader_type spatial;
+render_mode unshaded, cull_back, shadows_disabled;
+uniform vec4 col : source_color = vec4(1.0, 0.82, 0.25, 1.0);
+uniform float t = 0.0;
+uniform float prog = 0.0;
+uniform float glow = 0.0;
+varying vec2 lp;
+void vertex(){ lp = VERTEX.xz / 2.1; }
+void fragment(){
+  float r = length(lp);
+  float ang = atan(lp.y, lp.x) / 6.28318 + 0.5;
+  vec3 c = col.rgb * mix(1.12, 0.8, r);
+  float rip = smoothstep(0.82, 1.0, sin((r * 4.0 - t * (1.2 + glow)) * 6.28318) * 0.5 + 0.5);
+  c = mix(c, vec3(1.0), rip * (0.25 + 0.2 * glow) * (1.0 - r));
+  float pie = step(ang, prog) * step(r, 0.76);
+  c = mix(c, vec3(0.25, 0.85, 0.4), pie * 0.85);
+  float ring = smoothstep(0.035, 0.0, abs(r - 0.8)) * step(0.45, fract(ang * 28.0 - t * 0.4));
+  c = mix(c, vec3(1.0), ring * 0.85);
+  c = mix(c, col.rgb * 0.62, smoothstep(0.92, 1.0, r));
+  ALBEDO = c;
+}
+"""
+func _make_zone(pos: Vector3) -> Node3D:
+	var root := Node3D.new()
+	root.position = pos
+	add_child(root)
+	var base := MeshInstance3D.new()
+	base.mesh = _cyl(ZONE_R, 0.16, ZONE_R * 1.07, 48)
+	var bm := StandardMaterial3D.new()
+	bm.albedo_color = Color(0.88, 0.56, 0.18)
+	bm.roughness = 0.7
+	base.material_override = bm
+	base.position = Vector3(0, 0.08, 0)
+	root.add_child(base)
+	var top := MeshInstance3D.new()
+	top.mesh = _cyl(ZONE_R - 0.02, 0.01, -1, 48)
+	var tsm := ShaderMaterial.new()
+	tsm.shader = _fx_shader(ZONE_TOP_SH)
+	top.material_override = tsm
+	top.position = Vector3(0, 0.165, 0)
+	root.add_child(top)
+	var rim := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = ZONE_R - 0.07
+	tm.outer_radius = ZONE_R + 0.07
+	tm.rings = 48
+	tm.ring_segments = 8
+	rim.mesh = tm
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.albedo_color = Color(1.0, 0.97, 0.7)
+	rim.material_override = rm
+	rim.position = Vector3(0, 0.17, 0)
+	rim.scale = Vector3(1, 0.7, 1)
+	root.add_child(rim)
+	var wall := MeshInstance3D.new()
+	var wc := CylinderMesh.new()
+	wc.top_radius = ZONE_R
+	wc.bottom_radius = ZONE_R
+	wc.height = 1.6
+	wc.cap_top = false
+	wc.cap_bottom = false
+	wc.radial_segments = 48
+	wc.rings = 1
+	wall.mesh = wc
+	var wm := ShaderMaterial.new()
+	wm.shader = _fx_shader(ZONE_WALL_SH)
+	wall.material_override = wm
+	wall.position = Vector3(0, 0.8 + 0.16, 0)
+	root.add_child(wall)
+	root.set_meta("parts", {"base": bm, "top": tsm, "rim_m": rm, "wall": wm})
+	return root
+
+func _zone_update(inside: bool, prog: float) -> void:
+	var zone_parts: Dictionary = mission_zone.get_meta("parts")
+	var c := Color(0.55, 0.95, 0.45) if inside else Color(1.0, 0.82, 0.25)
+	var pulse := 0.5 + 0.5 * sin(elapsed * 6.0)
+	var tp: ShaderMaterial = zone_parts["top"]
+	tp.set_shader_parameter("col", Color(1.0, 0.9, 0.35) if inside else c)
+	tp.set_shader_parameter("t", elapsed)
+	tp.set_shader_parameter("prog", clampf(prog, 0.0, 1.0))
+	tp.set_shader_parameter("glow", 1.0 if inside else 0.0)
+	(zone_parts["base"] as StandardMaterial3D).albedo_color = Color(0.4, 0.72, 0.3) if inside else Color(0.88, 0.56, 0.18)
+	(zone_parts["rim_m"] as StandardMaterial3D).albedo_color = c.lerp(Color.WHITE, 0.55 + 0.35 * pulse)
+	var w: ShaderMaterial = zone_parts["wall"]
+	w.set_shader_parameter("col", Color(c.r, c.g, c.b, 0.8 if inside else 0.45 + 0.25 * pulse))
+	w.set_shader_parameter("t", elapsed)
 var missions_done := 0
 func _start_mission() -> void:
 	var kinds := ["kills", "nohit", "zone", "combo"]
@@ -1936,17 +2042,7 @@ func _start_mission() -> void:
 			zp.z = clampf(zp.z, -AZ + 2.0, AZ - 2.0)
 			mission["pos"] = _push_out(zp, 2.0)
 			mission["text"] = tr("숙제 검사! 노란 동그라미 안에서 %d초 버티기")
-			mission_zone = MeshInstance3D.new()
-			mission_zone.mesh = _cyl(1.0, 0.04, -1, 40)
-			var m := StandardMaterial3D.new()
-			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			m.albedo_color = Color(1.0, 0.85, 0.2, 0.35)
-			m.no_depth_test = true
-			mission_zone.material_override = m
-			mission_zone.position = mission["pos"] + Vector3(0, 0.05, 0)
-			mission_zone.scale = Vector3(2.2, 1, 2.2)
-			add_child(mission_zone)
+			mission_zone = _make_zone(mission["pos"])
 		"combo":
 			mission["goal"] = 40 + mini(dg, 10) * 3
 			mission["time"] = 30.0
@@ -1984,12 +2080,11 @@ func _update_mission(dt: float) -> void:
 			line = tr("안 맞고 %d / %d초") % [mini(mission["prog"], mission["goal"]), mission["goal"]]
 		"zone":
 			var zp: Vector3 = mission["pos"]
-			var inside := Vector2(player.position.x - zp.x, player.position.z - zp.z).length() < 2.2
+			var inside := Vector2(player.position.x - zp.x, player.position.z - zp.z).length() < ZONE_R
 			if inside:
 				mission["prog"] = float(mission["prog"]) + dt
 			if mission_zone:
-				var m: StandardMaterial3D = mission_zone.material_override
-				m.albedo_color = Color(0.4, 1.0, 0.5, 0.45) if inside else Color(1.0, 0.85, 0.2, 0.3 + 0.15 * sin(elapsed * 6.0))
+				_zone_update(inside, float(mission["prog"]) / float(mission["goal"]))
 			done = float(mission["prog"]) >= mission["goal"]
 			line = tr("동그라미 안 %.1f / %d초   남은 시간 %d초") % [minf(mission["prog"], mission["goal"]), mission["goal"], ceili(left)]
 		"combo":
@@ -3830,7 +3925,7 @@ func _process(delta: float) -> void:
 				e["hp"] = 99999.0
 		if shot_mode == "sup":
 			move_dir = Vector3(1, 0, 0)
-		if (shot_mode == "sup" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
+		if (shot_mode == "sup" or shot_mode == "mission_in" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
 			get_viewport().get_texture().get_image().save_png("/tmp/f_%s_%d.png" % [shot_mode, shot_frames])
 		if shot_mode.begins_with("gun_") and bullets.size() > 0 and shot_frames % 2 == 0 and shot_frames < 90:
 			get_viewport().get_texture().get_image().save_png("/tmp/gb_%s_%d.png" % [shot_mode, shot_frames])
@@ -5459,12 +5554,20 @@ func _setup_shot() -> void:
 		boss["pat_t"] = 0.3
 		boss["stage"] = 0
 		boss["speed"] = 0.0
-	if shot_mode == "mission":
+	if shot_mode == "mission" or shot_mode == "mission_in":
 		while true:
 			_start_mission()
 			if mission["kind"] == "zone":
 				break
 			_end_mission(false)
+		if shot_mode == "mission_in":
+			player.position = mission["pos"] + Vector3(0.6, 0, 0.3)
+			mission["prog"] = 1.5
+		else:
+			player.position = mission["pos"] + Vector3(0, 0, 3.4)
+		for e in enemies:
+			e["pos"] = mission["pos"] + ((e["pos"] as Vector3) - mission["pos"]).normalized() * 7.0
+			e["elite"] = false
 	if shot_mode == "chest":
 		mains["ddakji"] = 2
 		main_order.append("ddakji")
