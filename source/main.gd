@@ -226,10 +226,17 @@ func _ready() -> void:
 			Save.data["char"] = a.substr(7)
 		if a.begins_with("--seed="):
 			rng.seed = int(a.substr(7))
+		if a.begins_with("--clears="):
+			Save.data["clears"] = {"ground": int(a.substr(9))}   # 봇 시험용: 앞 단계를 깬 척
+		if a.begins_with("--shop="):
+			var sl := int(a.substr(7))   # 봇 시험용: 문방구 강화 단계
+			Save.data["shop"] = {"dmg": sl, "hp": sl / 2, "speed": sl / 2, "magnet": sl / 2, "xp": sl / 2, "w_gun": sl / 2, "w_ddakji": sl / 2}
 	if args.has("--seed"):
 		rng.seed = 7
 	if args.has("--weekly"):
 		Save.run_cfg["weekly"] = true
+	if args.has("--meta") or (shot_mode != "" and not args.has("--menu")) or args.has("--evoall"):
+		Save.evo_all = true
 	if args.has("--meta"):
 		Save.data["shop"] = {"dmg": 4, "hp": 2, "speed": 2, "magnet": 2, "xp": 2, "luck": 1, "reroll": 1, "revive": 1}
 	if args.has("--menu"):
@@ -1684,6 +1691,21 @@ func boss_rank() -> Dictionary:
 func boss_name() -> String:
 	return boss_rank()["pre"] + Save.STAGES[boss_stage()]["boss"]
 
+# 처음 단계는 순하게: 실제 난이도 1에서 10까지 차츰 원래 세기로 올라가요
+func ease_x() -> float:
+	return clampf((dg - 1) / 9.0, 0.0, 1.0)
+func ease_hp() -> float:
+	return lerpf(EASE_HP0, 1.0, ease_x())
+func ease_spawn() -> float:
+	return lerpf(EASE_SPAWN0, 1.0, ease_x())
+func ease_boss() -> float:
+	return lerpf(EASE_BOSS0, 1.0, ease_x())
+func ease_hp_for(d: int) -> float:
+	return lerpf(EASE_HP0, 1.0, clampf((d - 1) / 9.0, 0.0, 1.0))
+const EASE_HP0 := 0.6
+const EASE_SPAWN0 := 0.75
+const EASE_BOSS0 := 0.3
+
 func grade_hp() -> float:
 	var g := float(dg - 1)
 	return (1.0 + 0.45 * g + 0.02 * g * g) * STAGE_MULT[stage]
@@ -1785,7 +1807,20 @@ func pop_stats() -> Dictionary:
 	return d
 
 func evo_ready(id: String) -> bool:
-	return mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id)
+	return mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id) and evo_open(id)
+
+# 진화 비법: 내 친구의 시작 무기 비법은 처음부터 알고, 나머지는 단계를 깨면 열려요
+func evo_open(id: String) -> bool:
+	return Save.evo_open(id, Save.CHARS[char_id]["weapon"])
+
+var evo_hint := {}
+func _evo_lock_hint() -> void:
+	# 세트는 모았는데 진화 비법이 잠겨 있으면 한 번 알려 줘요
+	for id in MAINS:
+		if mains.get(id, 0) >= MAX_LV and supports.has(MAINS[id]["partner"]) and not evolved.has(id) and not evo_open(id) and not evo_hint.has(id):
+			evo_hint[id] = true
+			_banner(tr("%s 비법은 아직 잠겨 있어요!") % MAINS[id]["evo"] + "\n" + Save.evo_need_text(id, Save.CHARS[char_id]["weapon"]), Color("#ffd23f"))
+			return
 
 # =========================================================
 # 귀신
@@ -1795,9 +1830,9 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 		return {}
 	var k: Dictionary = KINDS[kind]
 	var t := elapsed / RUN_TIME
-	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * grade_hp() * (1.0 + 0.35 * clampf(t * 2.0, 0.0, 1.0))
+	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * grade_hp() * (1.0 + 0.35 * clampf(t * 2.0, 0.0, 1.0)) * ease_hp()
 	if kind == "boss":
-		hpv = k["hp"] * grade_hp()
+		hpv = k["hp"] * grade_hp() * ease_boss()
 	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
 		"squash": 0.0, "phase": rng.randf() * TAU, "spawn": 0.0, "dead": -1.0, "slow": 0.0, "elite": elite,
 		"speed": k["speed"] * (1.0 + t * 0.3) * (1.0 + minf(0.4, 0.02 * (dg - 1))) * (1.2 if day_mod == "sports" else 1.0) * (1.1 if day_mod == "vacation" else 1.0) * weather_speed(), "radius": k["r"], "scale": k["scale"], "xp": k["xp"], "hits": {},
@@ -1821,7 +1856,7 @@ func _spawn_logic(dt: float) -> void:
 		return
 	var t := elapsed / RUN_TIME
 	spawn_timer = lerpf(1.1, 0.3, clampf(t * 1.3, 0, 1))
-	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4) * weather_spawn())
+	var count := int((1 + int(t * 9.0)) * (1.0 + 0.12 * (dg - 1)) * (1.0 + (STAGE_MULT[stage] - 1.0) * 0.4) * weather_spawn() * ease_spawn())
 	if boss_spawned:
 		count = maxi(1, count / 3)
 	# 시간이 지날수록 센 귀신이 섞여요
@@ -4191,9 +4226,11 @@ func _set_lines() -> Array:
 			out.append([tr("%s 진화 완료!") % d["evo"], Color("#ffd23f")])
 		elif mains.has(id):
 			var have := supports.has(d["partner"])
-			out.append(["%s Lv.%d/5 + %s %s" % [d["name"], mains[id], pn, tr("(있어요)") if have else tr("(필요)")], Color("#6ee0b0") if have else Color.WHITE])
-		else:
+			out.append(["%s Lv.%d/5 + %s %s" % [d["name"], mains[id], pn, tr("(있어요)") if have else tr("(필요)")] + ("" if evo_open(id) else " " + tr("(잠김)")), Color("#6ee0b0") if have else Color.WHITE])
+		elif evo_open(id):
 			out.append(["%s + %s = %s" % [d["name"], pn, d["evo"]], Color(1, 1, 1, 0.5)])
+		else:
+			out.append(["%s + %s = %s %s" % [d["name"], pn, d["evo"], tr("(잠김)")], Color(1, 1, 1, 0.35)])
 	return out
 
 func _pause_menu() -> void:
@@ -4600,6 +4637,8 @@ func _make_card(c: Dictionary) -> Button:
 			col = Color(d["col"])
 			var pn: String = SUPPORTS[d["partner"]]["name"]
 			setline = tr("세트 짝꿍: %s%s") % [pn, tr("  (있어요!)") if supports.has(d["partner"]) else ""]
+			if not evo_open(c["id"]):
+				setline += tr("  (진화 잠김)")
 		"sup":
 			var d: Dictionary = SUPPORTS[c["id"]]
 			var cur: int = supports.get(c["id"], 0)
@@ -4665,6 +4704,7 @@ func _apply_card(c: Dictionary, from_chest := false) -> void:
 				hp = mini(max_hp(), hp + 1)
 		"heal":
 			hp = mini(max_hp(), hp + 2)
+	_evo_lock_hint()
 	if from_chest:
 		_refresh_ui()
 		_refresh_slots()
@@ -4992,7 +5032,12 @@ func _end_game(win: bool) -> void:
 		"score": kills + int(elapsed) * 3 + (3000 if win else 0)}
 	var rec := {"news": []}
 	if not auto_play and shot_mode == "":
+		var own: String = Save.CHARS[char_id]["weapon"]
+		var evo_before := Save.evo_open_list(own)
 		rec = Save.record_run(result)
+		for id in Save.evo_open_list(own):
+			if not evo_before.has(id):
+				rec["news"].append(tr("새 진화 비법: ") + MAINS[id]["evo"] + "!")
 	if auto_play:
 		print("END missions=%d " % missions_done + "stage=%s mod=%s gacha=%d coins=%d chests=%d elites=%d " % [stage, day_mod, gacha_used, run_coins, chests_opened, elites_killed] + "win=%s t=%d kills=%d lv=%d mains=%s sup=%s evo=%s" % [win, int(elapsed), kills, level, mains, supports, evolved.keys()])
 		get_tree().quit()
