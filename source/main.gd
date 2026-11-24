@@ -75,16 +75,16 @@ var bones := {}
 # ---------- 스킬 정의 ----------
 # 귀신 종류: 체력, 속도, 반지름, 크기, 딱지 수, 색, 나오기 시작하는 시간(초)
 const KINDS := {
-	"paper": {"hp": 24.0, "speed": 1.6, "r": 0.45, "scale": 1.25, "xp": 1, "col": "#c9a8f0", "from": 0.0},
-	"egg": {"hp": 13.0, "speed": 2.8, "r": 0.4, "scale": 1.25, "xp": 1, "col": "#a9d4f5", "from": 15.0},
-	"kettle": {"hp": 110.0, "speed": 1.2, "r": 0.62, "scale": 1.7, "xp": 3, "col": "#ffd23f", "from": 70.0},
-	"eraser": {"hp": 55.0, "speed": 1.7, "r": 0.5, "scale": 1.35, "xp": 2, "col": "#7fd18b", "from": 85.0},
-	"dust": {"hp": 9.0, "speed": 3.5, "r": 0.3, "scale": 0.95, "xp": 1, "col": "#b8b2c0", "from": 115.0},
-	"report": {"hp": 45.0, "speed": 2.0, "r": 0.42, "scale": 1.3, "xp": 2, "col": "#ff9db8", "from": 140.0},
-	"relay": {"hp": 30.0, "speed": 5.2, "r": 0.4, "scale": 1.35, "xp": 2, "col": "#ff6b6b", "from": 9999.0},
+	"paper": {"dmg": 1, "hp": 24.0, "speed": 1.6, "r": 0.45, "scale": 1.25, "xp": 1, "col": "#c9a8f0", "from": 0.0},
+	"egg": {"dmg": 1, "hp": 13.0, "speed": 2.8, "r": 0.4, "scale": 1.25, "xp": 1, "col": "#a9d4f5", "from": 15.0},
+	"kettle": {"dmg": 2, "hp": 110.0, "speed": 1.2, "r": 0.62, "scale": 1.7, "xp": 3, "col": "#ffd23f", "from": 70.0},
+	"eraser": {"dmg": 1, "hp": 55.0, "speed": 1.7, "r": 0.5, "scale": 1.35, "xp": 2, "col": "#7fd18b", "from": 85.0},
+	"dust": {"dmg": 1, "hp": 9.0, "speed": 3.5, "r": 0.3, "scale": 0.95, "xp": 1, "col": "#b8b2c0", "from": 115.0},
+	"report": {"dmg": 1, "hp": 45.0, "speed": 2.0, "r": 0.42, "scale": 1.3, "xp": 2, "col": "#ff9db8", "from": 140.0},
+	"relay": {"dmg": 1, "hp": 30.0, "speed": 5.2, "r": 0.4, "scale": 1.35, "xp": 2, "col": "#ff6b6b", "from": 9999.0},
 	"pot": {"hp": 40.0, "speed": 0.0, "r": 0.4, "scale": 1.3, "xp": 0, "col": "#d9774a", "from": 9999.0, "prop": true},
 	"ext": {"hp": 40.0, "speed": 0.0, "r": 0.35, "scale": 1.3, "xp": 0, "col": "#e8433a", "from": 9999.0, "prop": true},
-	"boss": {"hp": 36000.0, "speed": 1.35, "r": 1.5, "scale": 3.0, "xp": 0, "col": "#6fbf4a", "from": 9999.0},
+	"boss": {"dmg": 3, "hp": 36000.0, "speed": 1.35, "r": 1.5, "scale": 3.0, "xp": 0, "col": "#6fbf4a", "from": 9999.0},
 }
 
 const MAINS_KO := {
@@ -1909,6 +1909,7 @@ func _weighted(pool: Dictionary) -> String:
 
 # 정예 귀신과 보스
 var next_elite := 40.0
+var elite_drops := 0
 var boss_spawned := false
 var boss: Dictionary = {}
 var boss_warned := false
@@ -2320,7 +2321,8 @@ func _update_enemies(dt: float) -> void:
 		if obstacles.size() > 0:
 			e["pos"] = _push_out(e["pos"], e["radius"] * 0.8)
 		if dist < e["radius"] + 0.3 and hurt_timer <= 0.0 and not game_over and flee_t <= 0.0 and float(e.get("hop", 0.0)) < 0.5:
-			_player_hurt(e["pos"], 2 if e["kind"] == "boss" or e["elite"] else 1)
+			# 귀신마다 아픈 정도가 달라요: 보통 1, 주전자 2, 대왕귀신 3, 반짝이(정예)는 +1
+			_player_hurt(e["pos"], int(KINDS[e["kind"]].get("dmg", 1)) + (1 if e["elite"] and e["kind"] != "boss" else 0))
 	enemies = alive
 	# 서로 밀어내기
 	var n := enemies.size()
@@ -2443,9 +2445,17 @@ func _kill_enemy(e: Dictionary) -> void:
 			"pull": false, "t": 0.0, "col": Color("#ffc928"), "coin": true})
 	# 하트,자석,보물 상자 떨어뜨리기
 	if e["elite"]:
-		_drop("chest", pos + Vector3(0.5, 0, 0))
-		if rng.randf() < 0.35:
+		# 첫 반짝이는 상자를 꼭 주고, 그다음부터는 반반 (상자가 너무 자주 나와서)
+		elite_drops += 1
+		if elite_drops == 1 or rng.randf() < 0.5:
+			_drop("chest", pos + Vector3(0.5, 0, 0))
+			if rng.randf() < 0.35:
+				_drop("heart", pos + Vector3(-0.5, 0, 0))
+		else:
 			_drop("heart", pos + Vector3(-0.5, 0, 0))
+			for i in 6:
+				gems.append({"pos": pos + Vector3(0, 0.3, 0), "vel": Vector3(rng.randf_range(-3, 3), rng.randf_range(3, 6), rng.randf_range(-3, 3)) * 1.4,
+					"pull": false, "t": 0.0, "col": Color("#ffc928"), "coin": true})
 	elif e["kind"] != "boss":
 		var r := rng.randf()
 		if r < 0.004:
@@ -2758,7 +2768,7 @@ func _update_boss_attacks(dt: float) -> void:
 				_play("splash", 0.7, -5.0)
 				shake = maxf(shake, 0.2)
 				if d.length() < w["r"] and hurt_timer <= 0.0 and not game_over:
-					_player_hurt(w["pos"])
+					_player_hurt(w["pos"], 2)
 		else:
 			(mi.material_override as StandardMaterial3D).albedo_color.a = 0.25 + 0.25 * sin(w["t"] * 30.0)
 		if k >= 1.0:
@@ -2798,13 +2808,13 @@ func _use_gacha(d: Dictionary) -> void:
 	var extra: Array = []
 	var coins := 0
 	if r < 0.55:
-		var pool := _card_pool()
-		var c: Dictionary = pool[0] if pool[0]["type"] == "evo" else pool[rng.randi() % pool.size()]
+		var pool := _owned_pool()
+		var c: Dictionary = pool[0]
 		got.append(c)
 		_apply_card(c, true)
 		if rng.randf() < 0.25:
-			var pool2 := _card_pool()
-			var c2: Dictionary = pool2[rng.randi() % pool2.size()]
+			var pool2 := _owned_pool()
+			var c2: Dictionary = pool2[0]
 			got.append(c2)
 			_apply_card(c2, true)
 			extra.append(tr("한 개 더 나왔다!"))
@@ -3854,6 +3864,8 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 		return
 	nohit_t = 0.0
 	hp -= amount
+	if amount >= 2:
+		_number(player.position + Vector3(0, 2.0, 0), 0, true, tr("하트 -%d") % amount)
 	hurt_timer = 2.0
 	shake = 0.35
 	hitstop(0.08)
@@ -4555,6 +4567,23 @@ func _update_hud() -> void:
 		combo_label.text = ""
 
 # ---------- 레벨업 카드 ----------
+# 상자/뽑기: 새 무기나 새 아이템은 주지 않고, 이미 가진 것만 올려 줘요 (진화가 준비되면 진화)
+func _owned_pool() -> Array:
+	for id in MAINS:
+		if evo_ready(id):
+			return [{"type": "evo", "id": id}]
+	var opts: Array = []
+	for id in mains:
+		if not evolved.has(id) and mains[id] < MAX_LV:
+			opts.append({"type": "main", "id": id})
+	for id in supports:
+		if supports[id] < MAX_LV:
+			opts.append({"type": "sup", "id": id})
+	opts.shuffle()
+	if opts.is_empty():
+		opts.append({"type": "heal", "id": "heal"})
+	return opts
+
 func _card_pool() -> Array:
 	var pool: Array = []
 	for id in MAINS:
@@ -4814,11 +4843,11 @@ func _apply_card(c: Dictionary, from_chest := false) -> void:
 
 func _open_chest() -> void:
 	chests_opened += 1
-	var n := 3 if rng.randf() < 0.2 + 0.06 * Save.shop_lv("luck") else 1
+	var n := 3 if rng.randf() < 0.08 + 0.03 * Save.shop_lv("luck") else 1
 	var got: Array = []
 	for i in n:
-		var pool := _card_pool()
-		var c: Dictionary = pool[0] if pool[0]["type"] == "evo" else pool[rng.randi() % pool.size()]
+		var pool := _owned_pool()
+		var c: Dictionary = pool[0]
 		got.append(c)
 		_apply_card(c, true)
 	var cc := int(round((5 + 3 * n) * coin_mult()))

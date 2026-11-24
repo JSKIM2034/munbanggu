@@ -232,6 +232,7 @@ const EN := {
 	"  (진화 잠김)": "  (evo locked)",
 	"(잠김)": "(locked)",
 	"깨면 열려요: ": "Clear to unlock: ",
+	"하트 -%d": "Hearts -%d",
 	"진화 비법 '%s'": "evolution '%s'",
 	"새 친구 %s": "new friend %s",
 	"새 장소 %s": "new place %s",
