@@ -106,6 +106,9 @@ const MAINS_KO := {
 	"rubber": {"name": "고무줄", "icon": "줄", "col": "#ff9a2f", "partner": "sneakers", "evo": "무지개 고무줄",
 		"evo_desc": "무지개 고무줄이 두 겹으로 쫙쫙! 맞은 귀신은 느려져요",
 		"desc": ["고무줄이 쫙! 퍼지며 주변을 튕겨내요", "범위 +20%", "피해 +40%", "더 자주 퍼져요", "범위 +20%, 더 세게 튕겨요"]},
+	"top": {"name": "팽이", "icon": "팽", "col": "#e8524a", "partner": "pencil", "evo": "회오리 팽이",
+		"evo_desc": "큰 팽이 4개가 회오리를 일으켜 귀신을 빨아들이고 튕겨내요",
+		"desc": ["팽이를 던지면 바닥에서 돌며 귀신을 튕겨내요", "팽이 +1개", "피해 +40%", "더 오래 돌아요", "팽이 +1개, 더 크게"]},
 }
 var MAINS: Dictionary = Save.trd(MAINS_KO)
 const SUPPORTS_KO := {
@@ -115,7 +118,7 @@ const SUPPORTS_KO := {
 	"sneakers": {"name": "운동화", "icon": "신", "col": "#f2c230", "desc": "이동 속도 +10%, 반짝 발자국", "set": "rubber"},
 	"colorpaper": {"name": "색종이", "icon": "색", "col": "#6fd3ff", "desc": "색종이 별을 휙휙 던져요. 물줄기, 비행기, 콩알탄도 15% 빨라져요", "set": "plane"},
 	"magnifier": {"name": "돋보기", "icon": "돋", "col": "#ffb03f", "desc": "치명타 피해 +30%, 햇빛으로 귀신을 지져요", "set": "pop"},
-	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "줍는 거리 +40% (바닥에 원이 보여요)", "set": ""},
+	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "줍는 거리 +40% (바닥에 원이 보여요)", "set": "top"},
 	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "하트 +1, 하트 방패가 한 번 막아 줘요", "set": ""},
 }
 var SUPPORTS: Dictionary = Save.trd(SUPPORTS_KO)
@@ -142,7 +145,8 @@ var face_dir := Vector3(0, 0, 1)
 var walk_phase := 0.0
 var run_amt := 0.0
 var recoil := 0.0
-var cd := {"gun": 0.0, "yoyo": 0.5, "rubber": 1.0, "plane": 0.3, "pop": 0.8}
+var cd := {"gun": 0.0, "yoyo": 0.5, "rubber": 1.0, "plane": 0.3, "pop": 0.8, "top": 0.6}
+var tops: Array = []
 var planes: Array = []
 var pops: Array = []
 var plane_mesh: ArrayMesh
@@ -180,6 +184,10 @@ var ddakji_mesh: ArrayMesh
 var ddakji_gold_mesh: ArrayMesh
 var yoyo_mesh: ArrayMesh
 var yoyo_evo_mesh: ArrayMesh
+var top_mesh: ArrayMesh
+var coin_fall_mesh: ArrayMesh
+var fall_mats := {}
+var top_evo_mesh: ArrayMesh
 
 # UI
 var ui: CanvasLayer
@@ -283,6 +291,12 @@ func _ready() -> void:
 	var w: String = Save.CHARS[char_id]["weapon"]
 	mains = {w: 1}
 	main_order = [w]
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--give="):   # 봇 시험용: 무기 하나를 처음부터 더 줘요
+			var gw := a.substr(7)
+			if MAINS.has(gw) and not mains.has(gw):
+				mains[gw] = 1
+				main_order.append(gw)
 	rerolls = Save.shop_lv("reroll")
 	revives = Save.shop_lv("revive")
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -453,6 +467,19 @@ func _prewarm() -> void:
 	y.position = Vector3(0, -0.5, 0)
 	add_child(y)
 	get_tree().create_timer(0.3).timeout.connect(y.queue_free)
+	for cm in [true, false]:
+		var fz := MeshInstance3D.new()
+		fz.mesh = coin_fall_mesh if cm else mm["eshot"].multimesh.mesh
+		fz.material_override = _fall_mat(cm)
+		fz.position = Vector3(-0.5 if cm else -1.0, -0.5, 0)
+		add_child(fz)
+		get_tree().create_timer(0.3).timeout.connect(fz.queue_free)
+	var tpm := MeshInstance3D.new()
+	tpm.mesh = top_mesh
+	tpm.material_override = mat_vc
+	tpm.position = Vector3(0.5, -0.5, 0)
+	add_child(tpm)
+	get_tree().create_timer(0.3).timeout.connect(tpm.queue_free)
 	var z := _make_zone(Vector3(0, -3.0, 0))
 	get_tree().create_timer(0.3).timeout.connect(z.queue_free)
 
@@ -1425,6 +1452,58 @@ func _yoyo_mesh(c: Color) -> ArrayMesh:
 	L.append([_cyl(0.08, 0.01), T(Vector3(0, 0.105, 0)), c.lightened(0.5)])
 	return merge(L)
 
+func _shoe_mesh() -> ArrayMesh:
+	# 실내화: 둥근 앞코와 뒤꿈치, 파란 고무 밑창 + 하얀 고무 테두리, 볼록한 발등, 파란 띠, 반짝 하이라이트
+	var white := Color("#f7f4ec")
+	var blue := Color("#4f7fe0")
+	var trim := Color("#dfe4ee")
+	var L: Array = []
+	for z in [[-0.07, 0.085, 0.09], [0.08, 0.075, 0.08]]:
+		L.append([_cyl(1.0, 0.04, -1, 14), T(Vector3(0, -0.01, z[0]), Vector3.ZERO, Vector3(z[1], 1, z[2])), blue])
+		L.append([_cyl(1.0, 0.022, -1, 14), T(Vector3(0, 0.02, z[0]), Vector3.ZERO, Vector3(z[1] - 0.006, 1, z[2] - 0.006)), trim])
+	L.append([_box(Vector3(0.15, 0.04, 0.15)), T(Vector3(0, -0.01, 0.005)), blue])
+	L.append([_box(Vector3(0.138, 0.022, 0.15)), T(Vector3(0, 0.02, 0.005)), trim])
+	L.append([_sph(1.0, -1, 12, 6), T(Vector3(0, 0.035, -0.045), Vector3.ZERO, Vector3(0.074, 0.07, 0.115)), white])
+	L.append([_cyl(1.0, 0.075, -1, 12), T(Vector3(0, 0.065, 0.075), Vector3.ZERO, Vector3(0.068, 1, 0.07)), white])
+	L.append([_cyl(1.0, 0.01, -1, 12), T(Vector3(0, 0.1, 0.075), Vector3.ZERO, Vector3(0.05, 1, 0.052)), Color("#4a3a44")])
+	L.append([_cyl(1.0, 1.0, -1, 10), T(Vector3(0, 0.07, 0.01), Vector3(0, 0, 90), Vector3(0.158, 0.052, 0.03)), blue])
+	L.append([_sph(1.0, -1, 8, 4), T(Vector3(-0.028, 0.095, -0.07), Vector3.ZERO, Vector3(0.018, 0.008, 0.035)), Color(1.0, 1.0, 1.0)])
+	return merge(L)
+
+func _coin_mesh() -> ArrayMesh:
+	# 두툼한 동전: 진한 테두리, 밝은 앞면, 가운데 볼록한 무늬, 옆면 톱니, 반짝 줄
+	var gold := Color("#f5c03a")
+	var dark := Color("#c98a1a")
+	var L: Array = []
+	L.append([_cyl(0.55, 0.14, -1, 24), T(Vector3.ZERO), dark])
+	L.append([_cyl(0.46, 0.15, -1, 24), T(Vector3.ZERO), gold])
+	L.append([_cyl(0.24, 0.17, -1, 16), T(Vector3.ZERO), Color("#e5a52a")])
+	L.append([_cyl(0.16, 0.18, -1, 12), T(Vector3.ZERO), Color("#ffe07a")])
+	for i in 20:
+		var a := TAU * i / 20.0
+		L.append([_box(Vector3(0.03, 0.11, 0.05)), T(Vector3(cos(a) * 0.55, 0, sin(a) * 0.55), Vector3(0, -rad_to_deg(a), 0)), Color("#a86f12")])
+	for i in 6:
+		var a := TAU * i / 6.0
+		L.append([_sph(0.035, -1, 6, 3), T(Vector3(cos(a) * 0.35, 0.075, sin(a) * 0.35)), Color("#fff0a8")])
+	L.append([_box(Vector3(0.06, 0.01, 0.34)), T(Vector3(-0.18, 0.08, -0.05), Vector3(0, 35, 0)), Color(1.0, 0.98, 0.85)])
+	return merge(L)
+
+func _top_mesh(c1: Color, c2: Color) -> ArrayMesh:
+	# 위에서 봐도 팽이로 보이게: 넓은 윗판(줄무늬) + 아래로 뾰족한 몸통 + 쇠심 + 손잡이
+	var L: Array = []
+	L.append([_cyl(0.24, 0.07, 0.24, 20), T(Vector3(0, 0.1, 0)), c1])
+	L.append([_cyl(0.245, 0.03, 0.245, 20), T(Vector3(0, 0.075, 0)), c2])
+	L.append([_cyl(0.18, 0.012, 0.18, 20), T(Vector3(0, 0.14, 0)), c2])
+	L.append([_cyl(0.11, 0.014, 0.11, 16), T(Vector3(0, 0.146, 0)), c1.lightened(0.25)])
+	L.append([_cyl(0.23, 0.2, 0.03, 16), T(Vector3(0, -0.04, 0)), c1.darkened(0.15)])
+	L.append([_cyl(0.025, 0.08, 0.008, 8), T(Vector3(0, -0.17, 0)), Color("#c9ccd6")])
+	L.append([_cyl(0.04, 0.12, 0.05, 10), T(Vector3(0, 0.2, 0)), Color("#8a5a2b")])
+	L.append([_sph(0.05, -1, 8, 4), T(Vector3(0, 0.27, 0)), Color("#a8743f")])
+	for i in 4:
+		var a := TAU * i / 4.0
+		L.append([_box(Vector3(0.05, 0.018, 0.05)), T(Vector3(cos(a) * 0.15, 0.142, sin(a) * 0.15), Vector3(0, 45, 0)), Color.WHITE])
+	return merge(L)
+
 func _make_multimeshes() -> void:
 	for kind in KINDS:
 		var glb := "res://models/%s.glb" % (BOSS_MODELS.get(boss_stage(), "boss_locker") if kind == "boss" else GHOST_MODELS.get(kind, ""))
@@ -1465,11 +1544,8 @@ func _make_multimeshes() -> void:
 	GC.append([_cyl(0.43, 0.08), T(Vector3(0, 1.38, 0)), Color("#e8433a")])
 	gacha_mesh = merge(GC)
 	_mm("coin", _cyl(0.13, 0.04, -1, 14), 200, true)
-	var SH: Array = []
-	SH.append([_box(Vector3(0.16, 0.08, 0.3)), T(Vector3(0, 0.04, 0)), Color("#f5f2ea")])
-	SH.append([_box(Vector3(0.17, 0.03, 0.31)), T(Vector3(0, -0.01, 0)), Color("#4f7fe0")])
-	SH.append([_box(Vector3(0.12, 0.06, 0.1)), T(Vector3(0, 0.1, -0.08)), Color("#f5f2ea")])
-	_mm("eshot", merge(SH), 120, true)
+	_mm("eshot", _shoe_mesh(), 120, true)
+	coin_fall_mesh = _coin_mesh()
 	_mm("gem", _ddakji_mesh(Color.WHITE, Color(1, 1, 1).darkened(0.25)), 300, true)
 	_mm("bullet", _sph(0.17, -1, 10, 5), 80, false)
 	(mm["bullet"].material_override as ShaderMaterial).shader = _fx_shader("""
@@ -1559,6 +1635,8 @@ void fragment(){ float d = length(UV - 0.5) * 2.0; ALBEDO = vec3(0.25,0.15,0.1);
 	ddakji_gold_mesh = _ddakji_mesh(Color("#ffc928"), Color("#fff3b0"))
 	yoyo_mesh = _yoyo_mesh(Color("#2fc79a"))
 	yoyo_evo_mesh = _yoyo_mesh(Color("#ffd23f"))
+	top_mesh = _top_mesh(Color("#e8524a"), Color("#ffd23f"))
+	top_evo_mesh = _top_mesh(Color("#8a5cff"), Color("#6ee0ff"))
 
 # =========================================================
 # 철수
@@ -1777,6 +1855,19 @@ func _rubber_base() -> Dictionary:
 		return {"cool": 1.4, "radius": 4.2, "dmg": 24.0, "knock": 15.0, "double": true}
 	return {"cool": 3.0 * (0.72 if l >= 4 else 1.0), "radius": 2.6 * (1.2 if l >= 2 else 1.0) * (1.2 if l >= 5 else 1.0),
 		"dmg": 12.0 * (1.4 if l >= 3 else 1.0), "knock": 13.0 if l >= 5 else 10.0, "double": false}
+
+func top_stats() -> Dictionary:
+	var l := lv("top")
+	var w := Save.shop_lv("w_top")
+	var d: Dictionary
+	if evolved.has("top"):
+		d = {"count": 4, "dmg": 22.0, "life": 4.2, "cool": 3.6, "size": 1.3, "knock": 9.0, "speed": 3.6, "pull": 2.6}
+	else:
+		d = {"count": 1 + (1 if l >= 2 else 0) + (1 if l >= 5 else 0), "dmg": 11.0 * (1.4 if l >= 3 else 1.0),
+			"life": 3.4 * (1.5 if l >= 4 else 1.0), "cool": 3.4, "size": 1.25 if l >= 5 else 1.0, "knock": 8.0, "speed": 3.0, "pull": 0.0}
+	d["dmg"] *= 1.0 + 0.12 * w
+	d["cool"] *= 1.0 - 0.04 * w
+	return d
 
 func proj_speed() -> float:
 	return 1.0 + 0.15 * lv("colorpaper")
@@ -2733,6 +2824,23 @@ func _warn_mat(a: float) -> StandardMaterial3D:
 	m.no_depth_test = true
 	return m
 
+# 떨어지는 실내화/동전 재질은 한 번만 만들어 같이 써요 (처음 나올 때 멈칫하지 않게 _prewarm에서 미리 그려 둬요)
+func _fall_mat(coin: bool) -> StandardMaterial3D:
+	if not fall_mats.has(coin):
+		var fm := StandardMaterial3D.new()
+		fm.vertex_color_use_as_albedo = true
+		fm.emission_enabled = true
+		if coin:
+			fm.emission = Color(1.0, 0.7, 0.15)
+			fm.emission_energy_multiplier = 0.3
+			fm.metallic = 0.45
+			fm.roughness = 0.35
+		else:
+			fm.emission = Color(1.0, 0.25, 0.3)
+			fm.emission_energy_multiplier = 0.3
+		fall_mats[coin] = fm
+	return fall_mats[coin]
+
 func _warn_circle(pos: Vector3, r: float, delay: float, drop := "") -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _cyl(1.0, 0.02, -1, 32)
@@ -2749,21 +2857,8 @@ func _warn_circle(pos: Vector3, r: float, delay: float, drop := "") -> void:
 	if drop != "":
 		# 하늘에서 떨어지는 물건: 동그라미 가운데로 점점 빨라지며 떨어지고, 그림자가 커져요
 		var f := MeshInstance3D.new()
-		var fm := StandardMaterial3D.new()
-		if drop == "coin":
-			f.mesh = _cyl(0.55, 0.14, -1, 20)
-			fm.albedo_color = Color(1.0, 0.82, 0.25)
-			fm.emission_enabled = true
-			fm.emission = Color(1.0, 0.7, 0.15)
-			fm.emission_energy_multiplier = 0.6
-			fm.metallic = 0.6
-		else:
-			f.mesh = mm["eshot"].multimesh.mesh
-			fm.vertex_color_use_as_albedo = true
-			fm.emission_enabled = true
-			fm.emission = Color(1.0, 0.25, 0.3)
-			fm.emission_energy_multiplier = 0.35
-		f.material_override = fm
+		f.mesh = coin_fall_mesh if drop == "coin" else mm["eshot"].multimesh.mesh
+		f.material_override = _fall_mat(drop == "coin")
 		f.position = Vector3(pos.x, 10.0, pos.z)
 		f.scale = Vector3.ONE * (1.0 if drop == "coin" else 4.2)
 		add_child(f)
@@ -2973,6 +3068,103 @@ func _update_drops(dt: float) -> void:
 			mi.queue_free()
 			drops.erase(d)
 
+# 팽이: 던지면 바닥에 떨어져 빙글빙글 돌며 귀신 쪽으로 미끄러지고, 부딪힌 귀신을 튕겨내요
+func _weapon_top(dt: float) -> void:
+	if mains.has("top"):
+		var ts := top_stats()
+		cd["top"] -= dt
+		if cd["top"] <= 0.0:
+			cd["top"] = ts["cool"] * cd_mult()
+			var base_dir := face_dir
+			var tg := _nearest_enemy(8.0)
+			if not tg.is_empty():
+				base_dir = ((tg["pos"] as Vector3) - player.position).normalized()
+			base_dir.y = 0.0
+			if base_dir.length() < 0.1:
+				base_dir = Vector3(0, 0, 1)
+			for i in int(ts["count"]):
+				var dir := base_dir.normalized().rotated(Vector3.UP, (i - (ts["count"] - 1) / 2.0) * 0.9 + rng.randf_range(-0.2, 0.2))
+				var mi := MeshInstance3D.new()
+				mi.mesh = top_evo_mesh if evolved.has("top") else top_mesh
+				mi.material_override = mat_vc
+				add_child(mi)
+				var land := player.position + dir * rng.randf_range(1.8, 2.6)
+				tops.append({"node": mi, "from": player.position, "pos": land, "dir": dir, "t": 0.0, "fly": 0.3, "life": ts["life"],
+					"dmg": ts["dmg"], "knock": ts["knock"], "size": ts["size"] * area_mult(), "speed": ts["speed"], "pull": ts["pull"], "hit": {}, "spin": 0.0})
+			_play("yoyo", 0.75, -9.0)
+	var evo := evolved.has("top")
+	for t in tops.duplicate():
+		t["t"] += dt
+		var mi: MeshInstance3D = t["node"]
+		var sz: float = t["size"]
+		t["spin"] += dt * 28.0
+		if t["t"] < t["fly"]:
+			# 포물선을 그리며 날아가요
+			var k: float = t["t"] / t["fly"]
+			var p: Vector3 = (t["from"] as Vector3).lerp(t["pos"], k)
+			mi.position = p + Vector3(0, 0.35 + sin(k * PI) * 1.1, 0)
+			mi.rotation = Vector3(0.6, t["spin"], 0.0)
+			mi.scale = Vector3.ONE * 1.3 * sz
+			continue
+		if not t.has("landed"):
+			t["landed"] = true
+			_ring(t["pos"], Color(1.0, 0.9, 0.6, 0.8), 0.15, 0.9 * sz, 0.3)
+			_puff(t["pos"] + Vector3(0, 0.15, 0), 0.25, 0.35, Color(0.9, 0.85, 0.75, 0.6))
+		var left: float = t["life"] - (t["t"] - t["fly"])
+		# 가까운 귀신 쪽으로 천천히 미끄러져요 (부딪히면 방향이 튕겨요)
+		var near := {}
+		var nd := 4.5
+		for e in enemies:
+			if e["dead"] >= 0.0 or e.has("prop"):
+				continue
+			var dd: float = Vector2(e["pos"].x - t["pos"].x, e["pos"].z - t["pos"].z).length()
+			if dd < nd:
+				nd = dd
+				near = e
+		if not near.is_empty():
+			var want: Vector3 = (near["pos"] as Vector3) - (t["pos"] as Vector3)
+			want.y = 0.0
+			if want.length() > 0.01:
+				t["dir"] = (t["dir"] as Vector3).lerp(want.normalized(), minf(1.0, dt * 2.5)).normalized()
+		var tp: Vector3 = t["pos"] + t["dir"] * t["speed"] * dt
+		# 철수한테서 너무 멀어지지 않게
+		var fromp := tp - player.position
+		fromp.y = 0.0
+		if fromp.length() > 6.5:
+			t["dir"] = (-fromp).normalized()
+		t["pos"] = tp
+		var wob := 0.12 * (1.0 - clampf(left / 1.0, 0.0, 1.0))   # 멈출 때쯤 비틀비틀
+		mi.position = tp + Vector3(0, 0.2 * sz, 0)
+		mi.rotation = Vector3(0.35 + sin(t["spin"] * 0.3) * wob * 3.0, t["spin"], cos(t["spin"] * 0.3) * wob * 3.0)
+		mi.scale = Vector3.ONE * 1.3 * sz
+		if Engine.get_process_frames() % 3 == 0:
+			var gc := Color.from_hsv(fmod(elapsed * 1.2, 1.0), 0.55, 1.0, 0.6) if evo else Color(1.0, 0.55, 0.4, 0.5)
+			_glow(tp + Vector3(0, 0.08, 0), Vector3.ZERO, gc, 0.28 * sz, 0.3)
+		if evo and Engine.get_process_frames() % 10 == 0:
+			_ring(tp, Color(0.6, 0.85, 1.0, 0.5), t["pull"] * 0.9, 0.3, 0.35)
+		for e in enemies:
+			if e["dead"] >= 0.0:
+				continue
+			var d3: Vector3 = (e["pos"] as Vector3) - tp
+			d3.y = 0.0
+			var dl := d3.length()
+			# 회오리: 주변 귀신을 살살 끌어당겨요 (보스는 못 끌어요)
+			if t["pull"] > 0.0 and dl < t["pull"] and dl > 0.3 and e["kind"] != "boss" and not e.has("prop"):
+				e["pos"] -= d3.normalized() * minf(dl - 0.3, 2.2 * dt)
+			if dl < e["radius"] + 0.28 * sz:
+				var last: float = t["hit"].get(e, -9.0)
+				if t["t"] - last > 0.35:
+					t["hit"][e] = t["t"]
+					_hit_enemy(e, t["dmg"], d3, t["knock"])
+					# 팽이도 반대쪽으로 튕겨 나가요
+					if dl > 0.01:
+						t["dir"] = (-d3.normalized()).rotated(Vector3.UP, rng.randf_range(-0.6, 0.6))
+					_sparkle(tp + Vector3(0, 0.3, 0), Color(1.0, 0.95, 0.6, 0.9), 2, 4.0, 0.1, 0.25)
+		if left <= 0.0:
+			_puff(tp + Vector3(0, 0.2, 0), 0.25, 0.3, Color(1, 1, 1, 0.6))
+			mi.queue_free()
+			tops.erase(t)
+
 func _nearest_enemy(range_v: float) -> Dictionary:
 	var best := {}
 	var bd := range_v
@@ -3113,6 +3305,7 @@ func _weapons(dt: float) -> void:
 				mi.queue_free()
 				(y["line"] as Node).queue_free()
 				yoyos.erase(y)
+	_weapon_top(dt)
 	# 고무줄
 	if mains.has("rubber"):
 		var rs := rubber_stats()
@@ -4004,7 +4197,7 @@ func _process(delta: float) -> void:
 				e["hp"] = 99999.0
 		if shot_mode == "sup":
 			move_dir = Vector3(1, 0, 0)
-		if (shot_mode == "sup" or shot_mode == "mission_in" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
+		if (shot_mode == "sup" or shot_mode.begins_with("top") or shot_mode == "mission_in" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
 			get_viewport().get_texture().get_image().save_png("/tmp/f_%s_%d.png" % [shot_mode, shot_frames])
 		if shot_mode.begins_with("pat_") and shot_frames % 4 == 0 and shot_frames <= 72:
 			get_viewport().get_texture().get_image().save_png("/tmp/pb_%s_%02d.png" % [shot_mode, shot_frames])
@@ -5589,6 +5782,29 @@ func _setup_shot() -> void:
 		xp_need = 99999
 		spawn_timer = 999.0
 		next_elite = 9999.0
+	if shot_mode == "top" or shot_mode == "top_evo":
+		# 팽이 확인용
+		enemies.clear()
+		for i in 16:
+			var a := TAU * i / 16.0
+			var e := _make_enemy(["paper", "egg"][i % 2], Vector3(cos(a), 0, sin(a)) * rng.randf_range(2.5, 5.5))
+			e["hp"] = 99999.0
+			e["speed"] = 0.4
+			e["spawn"] = 1.0
+		mains.erase("gun")
+		main_order.erase("gun")
+		mains["top"] = 5
+		main_order.append("top")
+		supports["pencil"] = 1
+		support_order.append("pencil")
+		if shot_mode == "top_evo":
+			evolved["top"] = true
+		cd["top"] = 0.1
+		xp_need = 99999
+		spawn_timer = 999.0
+		next_elite = 9999.0
+		_refresh_ui()
+		_refresh_slots()
 	if shot_mode == "allw":
 		if OS.get_cmdline_user_args().has("--close"):
 			cam_off = Vector3(0, 7.0, 5.5)
