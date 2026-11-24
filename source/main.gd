@@ -2528,23 +2528,41 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 					_boss_rest(e, angry)
 			return [Vector3.ZERO, 6.0]
 		"charge":
+			# 돌진: 경고는 짧게, 준비하는 동안 철수 쪽으로 계속 고쳐 겨누다가(마지막 0.15초는 고정) 빠르고 길게 달려요
+			var wind := 0.45 if angry else 0.55
 			if e["stage"] == 0:
 				e["charge_dir"] = to_p / maxf(dist, 0.01)
 				e["stage"] = 1
-				e["pat_t"] = 0.9
-				_warn_line(e["pos"], e["charge_dir"], 0.9)
+				e["pat_t"] = wind
+				if not e.has("charges") or int(e["charges"]) <= 0:
+					e["charges"] = 2 if angry else 1
+				e["cwarn"] = _warn_line(e["pos"], e["charge_dir"], wind, 16.0)
 			if e["stage"] == 1:
-				e["squash"] = 0.3
+				e["squash"] = 0.3 + 0.15 * sin(elapsed * 60.0)
+				if e["pat_t"] > 0.15:
+					var aim := to_p / maxf(dist, 0.01)
+					e["charge_dir"] = (e["charge_dir"] as Vector3).slerp(aim, minf(1.0, dt * 6.0)).normalized()
+					var wl: MeshInstance3D = e.get("cwarn")
+					if is_instance_valid(wl):
+						wl.position = e["pos"] + e["charge_dir"] * 8.0 + Vector3(0, 0.04, 0)
+						wl.rotation.y = atan2(e["charge_dir"].x, e["charge_dir"].z)
 				if e["pat_t"] <= 0.0:
 					e["stage"] = 2
-					e["pat_t"] = 0.75
+					e["pat_t"] = 0.62
 					_play("rubber", 0.6, -2.0)
+					shake = maxf(shake, 0.15)
 				return [Vector3.ZERO, 8.0]
 			if e["pat_t"] <= 0.0:
+				e["charges"] = int(e["charges"]) - 1
+				if int(e["charges"]) > 0:
+					# 화나면 한 번 더! 잠깐 멈췄다 다시 겨눠요
+					e["stage"] = 0
+					e["vel"] = Vector3.ZERO
+					return [Vector3.ZERO, 20.0]
 				_boss_rest(e, angry)
-			if rng.randf() < 0.6:
+			if rng.randf() < 0.8:
 				_part("drop", e["pos"] + Vector3(0, 0.4, 0), Vector3(rng.randf_range(-1, 1), 2, rng.randf_range(-1, 1)), Color(1, 1, 1, 0.8), 0.14, 0.5)
-			return [e["charge_dir"] * 13.0, 14.0]
+			return [e["charge_dir"] * (17.0 + 0.5 * mini(dg, 10)), 45.0]   # 1단계 17.5 → 10단계 22
 		"rain":
 			# 우산 비: 철수 발밑에 빨간 동그라미, 잠시 뒤 쾅!
 			if e["stage"] == 0:
@@ -2552,7 +2570,7 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 				for i in n:
 					var off := Vector3.ZERO if i == 0 else Vector3(rng.randf_range(-3, 3), 0, rng.randf_range(-3, 3))
 					var wp := player.position + move_dir * move_speed() * 0.6 + off
-					_warn_circle(wp, 1.5, 1.1 + i * 0.12)
+					_warn_circle(wp, 1.5, 1.1 + i * 0.12, "shoe")
 				e["stage"] = 1
 				e["pat_t"] = 1.6
 			if e["pat_t"] <= 0.0:
@@ -2665,7 +2683,7 @@ func _boss_ai(e: Dictionary, dt: float, to_p: Vector3, dist: float) -> Array:
 					var wp := player.position + Vector3(cos(a), 0, sin(a)) * r
 					if i == 0:
 						wp = player.position + move_dir * move_speed() * 0.8
-					_warn_circle(wp, 1.3, 0.9 + (i % 4) * 0.25)
+					_warn_circle(wp, 1.3, 0.9 + (i % 4) * 0.25, "coin")
 				for i in 10:
 					_glow(e["pos"] + Vector3(0, 2.0, 0), Vector3(rng.randf_range(-3, 3), 6.0, rng.randf_range(-3, 3)), Color(1.0, 0.85, 0.3, 0.9), 0.3, 0.6, 9.0)
 				_play("coin", 0.7, -3.0)
@@ -2715,7 +2733,7 @@ func _warn_mat(a: float) -> StandardMaterial3D:
 	m.no_depth_test = true
 	return m
 
-func _warn_circle(pos: Vector3, r: float, delay: float) -> void:
+func _warn_circle(pos: Vector3, r: float, delay: float, drop := "") -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _cyl(1.0, 0.02, -1, 32)
 	mi.material_override = _warn_mat(0.5)
@@ -2727,18 +2745,55 @@ func _warn_circle(pos: Vector3, r: float, delay: float) -> void:
 	inner.material_override = _warn_mat(0.7)
 	inner.scale = Vector3(0.01, 1, 0.01)
 	mi.add_child(inner)
-	warns.append({"node": mi, "inner": inner, "t": 0.0, "life": delay, "pos": pos, "r": r, "kind": "circle"})
+	var w := {"node": mi, "inner": inner, "t": 0.0, "life": delay, "pos": pos, "r": r, "kind": "circle"}
+	if drop != "":
+		# 하늘에서 떨어지는 물건: 동그라미 가운데로 점점 빨라지며 떨어지고, 그림자가 커져요
+		var f := MeshInstance3D.new()
+		var fm := StandardMaterial3D.new()
+		if drop == "coin":
+			f.mesh = _cyl(0.55, 0.14, -1, 20)
+			fm.albedo_color = Color(1.0, 0.82, 0.25)
+			fm.emission_enabled = true
+			fm.emission = Color(1.0, 0.7, 0.15)
+			fm.emission_energy_multiplier = 0.6
+			fm.metallic = 0.6
+		else:
+			f.mesh = mm["eshot"].multimesh.mesh
+			fm.vertex_color_use_as_albedo = true
+			fm.emission_enabled = true
+			fm.emission = Color(1.0, 0.25, 0.3)
+			fm.emission_energy_multiplier = 0.35
+		f.material_override = fm
+		f.position = Vector3(pos.x, 10.0, pos.z)
+		f.scale = Vector3.ONE * (1.0 if drop == "coin" else 4.2)
+		add_child(f)
+		var sh := MeshInstance3D.new()
+		sh.mesh = _cyl(1.0, 0.01, -1, 24)
+		var sm := StandardMaterial3D.new()
+		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		sm.albedo_color = Color(0.1, 0.0, 0.1, 0.0)
+		sm.no_depth_test = true
+		sm.render_priority = 3
+		sh.material_override = sm
+		sh.position = Vector3(pos.x, 0.06, pos.z)
+		sh.scale = Vector3(0.1, 1, 0.1)
+		add_child(sh)
+		w["fall"] = f
+		w["shadow"] = sh
+		w["spin"] = rng.randf_range(-6.0, 6.0)
+	warns.append(w)
 
-func _warn_line(pos: Vector3, dir: Vector3, life: float) -> void:
+func _warn_line(pos: Vector3, dir: Vector3, life: float, len := 12.0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _box(Vector3(2.2, 0.02, 1.0))
 	mi.material_override = _warn_mat(0.5)
 	add_child(mi)
-	var len := 12.0
 	mi.position = pos + dir * len / 2.0 + Vector3(0, 0.04, 0)
 	mi.rotation.y = atan2(dir.x, dir.z)
 	mi.scale = Vector3(1, 1, len)
 	warns.append({"node": mi, "t": 0.0, "life": life, "kind": "line"})
+	return mi
 
 func _update_boss_attacks(dt: float) -> void:
 	var keep: Array = []
@@ -2760,6 +2815,18 @@ func _update_boss_attacks(dt: float) -> void:
 		var mi: MeshInstance3D = w["node"]
 		if w["kind"] == "circle":
 			(w["inner"] as MeshInstance3D).scale = Vector3(k, 1, k)
+			if w.has("fall"):
+				var kk := clampf(k, 0.0, 1.0)
+				var f: MeshInstance3D = w["fall"]
+				f.position.y = 0.3 + 9.7 * (1.0 - kk * kk)
+				f.rotation = Vector3(w["t"] * 3.0, w["t"] * float(w["spin"]), 0.0)
+				var sh: MeshInstance3D = w["shadow"]
+				sh.scale = Vector3.ONE * (0.25 + 0.75 * kk) * float(w["r"]) * 0.6
+				sh.scale.y = 1.0
+				(sh.material_override as StandardMaterial3D).albedo_color.a = 0.15 + 0.4 * kk
+				if k >= 1.0:
+					f.queue_free()
+					sh.queue_free()
 			if k >= 1.0:
 				var d: Vector3 = player.position - w["pos"]
 				d.y = 0
@@ -3939,6 +4006,8 @@ func _process(delta: float) -> void:
 			move_dir = Vector3(1, 0, 0)
 		if (shot_mode == "sup" or shot_mode == "mission_in" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
 			get_viewport().get_texture().get_image().save_png("/tmp/f_%s_%d.png" % [shot_mode, shot_frames])
+		if shot_mode.begins_with("pat_") and shot_frames % 4 == 0 and shot_frames <= 72:
+			get_viewport().get_texture().get_image().save_png("/tmp/pb_%s_%02d.png" % [shot_mode, shot_frames])
 		if shot_mode.begins_with("gun_") and bullets.size() > 0 and shot_frames % 2 == 0 and shot_frames < 90:
 			get_viewport().get_texture().get_image().save_png("/tmp/gb_%s_%d.png" % [shot_mode, shot_frames])
 		if shot_mode == "boss" and shot_frames % 12 == 0:
@@ -5581,6 +5650,7 @@ func _setup_shot() -> void:
 		boss = _make_enemy("boss", Vector3(0, 0, -4))
 		boss["pat"] = shot_mode.substr(4)
 		boss["pat_t"] = 0.3
+		enemies = [boss]   # 패턴만 잘 보이게 다른 귀신은 치워요
 		boss["stage"] = 0
 		boss["speed"] = 0.0
 	if shot_mode == "mission" or shot_mode == "mission_in":
