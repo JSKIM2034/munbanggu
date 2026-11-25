@@ -4132,10 +4132,12 @@ func _sync_draw() -> void:
 			var rk := boss_rank()
 			var bt: Color = rk["tint"]
 			tint = bt.lerp(bt * 1.25, 0.5 + 0.5 * sin(elapsed * 3.0)) if rk["pre"] != "" else bt
+			if e["dead"] < 0.0:
+				fl *= 0.4   # 보스는 계속 맞아서 하얗게만 보이지 않게 살짝만 번쩍
 		if e["kind"] == "eraser" and e["dash_t"] > 0.45:
 			tint = Color(1.4, 0.8, 0.8)
-		# 위험 표시: 세게 때리는 귀신은 발밑에 빨간 고리가 두근두근
-		if e["dead"] < 0.0 and dzn < MAX_ENEMY and kind != "boss" and (kind == "kettle" or e["elite"] or (kind == "eraser" and e["dash_t"] > 0.45)):
+		# 위험 표시: 세게 때리는 귀신은 가까이 오면 발밑에 빨간 고리가 두근두근 (멀리 있는 것까지 다 그리면 화면이 빨개져서)
+		if e["dead"] < 0.0 and dzn < MAX_ENEMY and kind != "boss" and (e["elite"] or ((kind == "kettle" or (kind == "eraser" and e["dash_t"] > 0.45)) and (e["pos"] as Vector3).distance_to(player.position) < 5.0)):
 			var beat := 0.5 + 0.5 * sin(elapsed * 7.0 + e["phase"])
 			var dsz: float = es * (1.05 + 0.08 * beat) * pop
 			var dcol := Color(1.0, 0.82, 0.2) if e["elite"] else Color(1.0, 0.2, 0.2)
