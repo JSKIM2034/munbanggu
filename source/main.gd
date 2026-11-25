@@ -2636,7 +2636,8 @@ func _kill_enemy(e: Dictionary) -> void:
 					"pull": false, "t": 0.0, "col": Color("#ffc928"), "coin": true})
 	elif e["kind"] != "boss":
 		var r := rng.randf()
-		if r < 0.004:
+		# 하트가 1~2칸 남으면 하트가 조금 더 잘 나와요 (간당간당 버티게)
+		if r < (0.012 if hp <= 2 else 0.004):
 			_drop("heart", pos)
 		elif r < 0.011:
 			_drop("magnet", pos)
@@ -4289,6 +4290,7 @@ func _sync_draw() -> void:
 	pm2.visible_instance_count = pn
 
 var god := false
+var last_stand_used := false
 func _player_hurt(from: Vector3, amount := 1) -> void:
 	if god:
 		return
@@ -4319,6 +4321,24 @@ func _player_hurt(from: Vector3, amount := 1) -> void:
 		if d.length() < 2.5:
 			e["vel"] = d.normalized() * 7.0
 	_refresh_ui()
+	if hp == 1 and not last_stand_used and not game_over:
+		# 판마다 한 번: 하트 1칸이 되면 마지막 힘! 주변 귀신을 밀어내고 하트 하나를 떨어뜨려요
+		last_stand_used = true
+		hurt_timer = 2.5
+		_banner(tr("하트 1칸! 마지막 힘!"), Color("#ff7a9a"))
+		_ring(player.position, Color(1.0, 0.4, 0.55, 1.0), 0.5, 4.5, 0.5)
+		_play("level", 0.8, -4.0)
+		for e in enemies:
+			var d: Vector3 = e["pos"] - player.position
+			d.y = 0.0
+			if d.length() < 4.5 and e["kind"] != "boss" and not e.has("prop"):
+				e["vel"] = d.normalized() * 12.0
+				e["push"] = 0.3
+		var a := rng.randf() * TAU
+		var hpos := player.position + Vector3(cos(a), 0, sin(a)) * 2.5
+		hpos.x = clampf(hpos.x, -AX + 0.5, AX - 0.5)
+		hpos.z = clampf(hpos.z, -AZ + 0.5, AZ - 0.5)
+		_drop("heart", _push_out(hpos, 0.5))
 	if hp <= 0 and revives > 0:
 		revives -= 1
 		hp = maxi(2, max_hp() / 2)

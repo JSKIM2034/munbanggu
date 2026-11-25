@@ -84,6 +84,7 @@ const EN := {
 	"줄": "R",
 	"팽": "T",
 	"동전으로 강해져요!": "Spend coins to get stronger!",
+	"하트 1칸! 마지막 힘!": "1 heart left! Last stand!",
 	"%s %d단계 깨기": "Clear %s Stage %d",
 	" (깨면 %s)": " (unlocks %s)",
 	"도장 '%s' %d/%d": "Stamp '%s' %d/%d",
