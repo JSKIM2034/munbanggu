@@ -215,6 +215,7 @@ var audio_i := 0
 
 var auto_play := false
 var shot_mode := ""
+var trailer := false   # --trailer: 홍보 영상용 (--shot= 장면으로 시작, 자동 플레이와 함께)
 var perf_frames := 0
 
 # =========================================================
@@ -226,6 +227,7 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	auto_play = args.has("--auto")
 	hitch_log = args.has("--hitch")
+	trailer = args.has("--trailer")
 	if OS.has_feature("web"):
 		var q = JavaScriptBridge.eval("location.search")
 		if q is String and (q as String).contains("hitch"):
@@ -3197,9 +3199,11 @@ func _weapon_bb(dt: float, target: Dictionary) -> void:
 							if dd < nd:
 								nd = dd
 								nb = e2
+						var nd3 := Vector3.ZERO
 						if not nb.is_empty():
-							var nd3: Vector3 = (nb["pos"] as Vector3) - (e["pos"] as Vector3)
+							nd3 = (nb["pos"] as Vector3) - (e["pos"] as Vector3)
 							nd3.y = 0.0
+						if nd3.length() > 0.01:
 							b["dir"] = nd3.normalized()
 							b["life"] = 0.3
 							b["bounce"] = 0.0
@@ -3220,6 +3224,8 @@ func _weapon_bb(dt: float, target: Dictionary) -> void:
 		m.set_instance_color(i, Color.WHITE)
 		m.set_instance_custom_data(i, Color(c.r, c.g, c.b, 0.25 if gold else 0.08))
 		var dir: Vector3 = b["dir"]
+		if dir.length() < 0.01:
+			dir = Vector3(0, 0, 1)
 		tm.set_instance_transform(i, Transform3D(Basis.looking_at(dir, Vector3.UP) * Basis.from_scale(Vector3(0.05, 0.05, 0.32)), b["pos"] - dir * 0.3))
 		tm.set_instance_custom_data(i, Color(1.0, 0.85, 0.4, 0.45) if gold else Color(1.0, 1.0, 0.9, 0.3))
 	m.visible_instance_count = n
@@ -4383,7 +4389,9 @@ func _process(delta: float) -> void:
 	var dt := minf(delta, 0.05)
 	if hitch_log:
 		_hitch_tick()
-	if shot_mode != "":
+	if shot_mode != "" and trailer:
+		shot_frames += 1   # 홍보 영상 녹화: 장면만 꾸미고 캡처/종료는 안 해요 (--quit-after로 끝내요)
+	elif shot_mode != "":
 		shot_frames += 1
 		if shot_mode == "hero":
 			cam.look_at(player.position + Vector3(0, 0.6, 0.6), Vector3.UP)
@@ -5427,7 +5435,7 @@ func _evo_cinematic(id: String) -> void:
 	_play("evo", 1.0, 0.0)
 	_play("warn", 0.6, -6.0)
 	_vib(80)
-	if auto_play:
+	if auto_play and not trailer:
 		evo_cine = 0.01
 		return
 	var d: Dictionary = MAINS[id]
