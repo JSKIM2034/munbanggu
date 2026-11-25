@@ -611,6 +611,14 @@ void vertex(){ cu = INSTANCE_CUSTOM; }
 void fragment(){ ALBEDO = cu.rgb; ALPHA = cu.a; }
 """
 
+# 장소마다 귀신 색을 살짝 다르게 (운동장은 그대로)
+const STAGE_TINT := {"ground": Color(1, 1, 1), "hall": Color(0.88, 1.06, 0.98), "lab": Color(0.82, 0.9, 1.25),
+	"toilet": Color(0.84, 1.08, 1.1), "roof": Color(1.12, 0.98, 0.82), "music": Color(1.1, 0.88, 1.08)}
+# 처음 만나는 귀신 한 줄 안내 (그 귀신을 한 번도 물리친 적 없을 때, 판마다 한 번)
+const GHOST_TIP_KO := {"egg": "엄청 빨라요! 피해 다녀요", "kettle": "단단하고 아파요 (하트 2칸)",
+	"eraser": "빨갛게 떨면 곧 쌩 돌진해요", "dust": "약하지만 떼로 몰려와요", "report": "지그재그로 다가와요",
+	"relay": "엄청 빨라요! 운동회 날에만 나와요"}
+var tip_shown := {}
 const GHOST_MODELS := {"paper": "ghost_paper", "egg": "ghost_egg", "kettle": "ghost_kettle", "eraser": "ghost_eraser",
 	"dust": "ghost_dust", "report": "ghost_report", "boss": "boss_locker", "relay": "ghost_relay", "pot": "prop_pot", "ext": "prop_ext"}
 const BOSS_MODELS := {"ground": "boss_locker", "hall": "boss_hall", "lab": "boss_lab", "toilet": "boss_toilet", "roof": "boss_roof", "music": "boss_music"}
@@ -1655,6 +1663,15 @@ render_mode unshaded, blend_mix, depth_draw_never, shadows_disabled;
 void fragment(){ float d = length(UV - 0.5) * 2.0; ALBEDO = vec3(0.25,0.15,0.1); ALPHA = (1.0 - smoothstep(0.55, 1.0, d)) * 0.28; }
 """
 	sm.shader = shs
+	# 위험한 귀신(주전자, 반짝이, 돌진 준비하는 지우개) 발밑의 빨간 고리
+	_mm("danger", q, MAX_ENEMY, false)
+	(mm["danger"].material_override as ShaderMaterial).shader = _fx_shader("""
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, shadows_disabled;
+varying vec4 cu;
+void vertex(){ cu = INSTANCE_CUSTOM; }
+void fragment(){ float d = length(UV - 0.5) * 2.0; float r = smoothstep(0.72, 0.8, d) * (1.0 - smoothstep(0.92, 1.0, d)); ALBEDO = cu.rgb; ALPHA = r * cu.a + (1.0 - smoothstep(0.0, 0.8, d)) * cu.a * 0.12; }
+""")
 	plane_mesh = _paper_plane(Color("#f5f8ff"), Color("#9cc2ff"))
 	crane_mesh = _paper_plane(Color("#fff3b0"), Color("#ff9ab8"), true)
 	var PP: Array = []
@@ -1984,6 +2001,9 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 	var t := elapsed / RUN_TIME
 	if hitch_log:
 		_hev("enemy:" + kind + ("*" if elite else ""))
+	if GHOST_TIP_KO.has(kind) and not tip_shown.has(kind) and elapsed > 3.0 and int(Save.data["bestiary"].get(kind, 0)) == 0 and shot_mode == "":
+		tip_shown[kind] = true
+		_banner(tr("새 귀신! %s: %s") % [Save.BESTIARY[kind]["name"], tr(GHOST_TIP_KO[kind])], Color("#ffb0b0"))
 	var gm := grade_hp() * ease_hp()
 	if gm > 1.0:
 		# 높은 단계도 처음 1분 반은 순하게 시작해서 무기를 모을 틈을 줘요
@@ -4086,6 +4106,9 @@ func _sync_draw() -> void:
 	sh.set_instance_transform(shn, Transform3D(Basis(), player.position + Vector3(0, 0.02, 0)))
 	sh.set_instance_custom_data(shn, Color(1, 1, 1, 1))
 	shn += 1
+	var dg_m: MultiMesh = mm["danger"].multimesh
+	var dzn := 0
+	var stint: Color = STAGE_TINT.get(stage, Color(1, 1, 1))
 	for e in enemies:
 		var kind: String = e["kind"]
 		var m: MultiMesh = mm[kind].multimesh
@@ -4102,7 +4125,7 @@ func _sync_draw() -> void:
 			var k: float = e["dead"] / 0.16
 			scl = Vector3(1.0 + k * 0.7, 1.0 - k * 0.85, 1.0 + k * 0.7) * es
 			fl = 1.0
-		var tint := Color(1, 1, 1)
+		var tint := stint if not e.has("prop") else Color(1, 1, 1)
 		if e["elite"]:
 			tint = Color(1.25, 1.05, 0.55).lerp(Color(1.4, 1.3, 0.9), 0.5 + 0.5 * sin(elapsed * 6.0))
 		if e["kind"] == "boss":
@@ -4111,6 +4134,14 @@ func _sync_draw() -> void:
 			tint = bt.lerp(bt * 1.25, 0.5 + 0.5 * sin(elapsed * 3.0)) if rk["pre"] != "" else bt
 		if e["kind"] == "eraser" and e["dash_t"] > 0.45:
 			tint = Color(1.4, 0.8, 0.8)
+		# 위험 표시: 세게 때리는 귀신은 발밑에 빨간 고리가 두근두근
+		if e["dead"] < 0.0 and dzn < MAX_ENEMY and kind != "boss" and (kind == "kettle" or e["elite"] or (kind == "eraser" and e["dash_t"] > 0.45)):
+			var beat := 0.5 + 0.5 * sin(elapsed * 7.0 + e["phase"])
+			var dsz: float = es * (1.05 + 0.08 * beat) * pop
+			var dcol := Color(1.0, 0.82, 0.2) if e["elite"] else Color(1.0, 0.2, 0.2)
+			dg_m.set_instance_transform(dzn, Transform3D(Basis().scaled(Vector3(dsz, 1, dsz)), e["pos"] + Vector3(0, 0.03, 0)))
+			dg_m.set_instance_custom_data(dzn, Color(dcol.r, dcol.g, dcol.b, 0.45 + 0.35 * beat))
+			dzn += 1
 		var tr := Transform3D(Basis(Vector3.UP, e["rot"]).scaled(scl), e["pos"] + Vector3(0, hop * 0.12 + float(e.get("hop", 0.0)), 0))
 		m.set_instance_transform(i, tr)
 		m.set_instance_color(i, Color.WHITE)
@@ -4121,6 +4152,7 @@ func _sync_draw() -> void:
 	for kind in KINDS:
 		mm[kind].multimesh.visible_instance_count = counts[kind]
 	sh.visible_instance_count = shn
+	dg_m.visible_instance_count = dzn
 	# 딱지
 	var gm: MultiMesh = mm["gem"].multimesh
 	var cm: MultiMesh = mm["coin"].multimesh
@@ -4786,24 +4818,27 @@ func _pause_menu() -> void:
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.offset_left = -300
 	t.offset_right = 300
-	t.offset_top = -500
-	t.offset_bottom = -420
+	t.offset_top = -570
+	t.offset_bottom = -490
 	var sl := _label(tr("세트 진화표"), 36, Color("#ffdf3d"), card_panel, 9)
 	sl.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sl.offset_left = -330
 	sl.offset_right = 330
-	sl.offset_top = -400
-	sl.offset_bottom = -350
+	sl.offset_top = -475
+	sl.offset_bottom = -425
+	# 무기가 8개라 줄 간격을 좁히고, 계속하기 버튼과 겹치지 않게 위에서 시작해요
 	var lines := _set_lines()
+	var step := minf(40.0, 300.0 / maxf(1.0, lines.size()))
 	for i in lines.size():
-		var ll := _label(lines[i][0], 25, lines[i][1], card_panel, 8)
+		var ll := _label(lines[i][0], 24, lines[i][1], card_panel, 8)
 		ll.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		ll.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		ll.offset_left = -340
-		ll.offset_right = 340
-		ll.offset_top = -350 + i * 40
-		ll.offset_bottom = -312 + i * 40
+		ll.offset_left = -345
+		ll.offset_right = 345
+		ll.offset_top = -420 + i * step
+		ll.offset_bottom = -386 + i * step
+		_fit(ll, 690)
 	var go := _small_btn(tr("계속하기"), Color("#4fa8e8"), 44)
 	go.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	go.offset_left = -170
@@ -4989,6 +5024,8 @@ func _update_hud() -> void:
 	if combo >= 5:
 		var cm := combo_mult()
 		combo_label.text = tr("%d 콤보!") % combo + (tr("\n피해 x%.2f") % cm if cm > 1.0 else "")
+		# 숙제 검사 글이 떠 있으면 그 아래로 내려서 겹치지 않게
+		combo_label.offset_top = 262.0 if mission_label != null and mission_label.visible else 200.0
 		combo_label.add_theme_color_override("font_color", Color("#ffdf3d").lerp(Color("#ff5c7a"), clampf((cm - 1.0) / 0.6, 0, 1)))
 		combo_label.modulate.a = minf(1.0, clampf(combo_timer / 1.6, 0, 1) * 3.0)
 		combo_label.scale = Vector2.ONE * (1.0 + maxf(0.0, combo_timer - 1.45) * 3.0)
@@ -5591,7 +5628,10 @@ func _end_game(win: bool) -> void:
 	if not auto_play and shot_mode == "":
 		var own: String = Save.CHARS[char_id]["weapon"]
 		var evo_before := Save.evo_open_list(own)
+		var prev_best: Dictionary = Save.data["best"].get("%s_%d" % [stage, grade], {})
 		rec = Save.record_run(result)
+		if not win and not weekly and not prev_best.is_empty() and not prev_best.get("win", false) and int(elapsed) > int(prev_best.get("time", 0)):
+			rec["news"].append(tr("새 최고 기록! 전보다 %d초 더 버텼어요") % (int(elapsed) - int(prev_best.get("time", 0))))
 		for id in Save.evo_open_list(own):
 			if not evo_before.has(id):
 				rec["news"].append(tr("새 진화 비법: ") + MAINS[id]["evo"] + "!")
@@ -5638,6 +5678,22 @@ func _end_game(win: bool) -> void:
 	s.offset_top = 140
 	s.offset_left = 20
 	s.offset_right = -20
+	# 다음 목표: 한 판 끝날 때마다 "다음엔 뭘 하지?"가 보이게 (아래쪽, 버튼 위)
+	if not weekly and (shot_mode == "" or shot_mode == "end"):
+		var evn := {}
+		for wid in MAINS:
+			evn[wid] = MAINS[wid]["evo"]
+		var goals := Save.next_goals(stage, evn)
+		var gtxt := tr("다음 목표") + "\n" + "\n".join(goals.map(func(g): return "· " + g))
+		var gl := _label(gtxt, 26, Color("#2f8f6a"), box_p, 0)
+		gl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		gl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		gl.offset_left = 24
+		gl.offset_right = -24
+		gl.offset_top = -330
+		gl.offset_bottom = -160
+		_fit_box(gl, 512, 170)
 	var b := Button.new()
 	b.text = tr("한 판 더!")
 	b.add_theme_font_override("font", font)

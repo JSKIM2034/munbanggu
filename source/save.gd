@@ -382,6 +382,38 @@ func first_clear_rewards(sid: String, grade: int, evo_names: Dictionary) -> Arra
 				out.append(tr("새 장소 %s") % STAGES[s]["name"])
 	return out
 
+# 판이 끝난 뒤 보여 줄 "다음 목표" (최대 3줄): 다음 단계와 그 보상, 거의 다 된 도장, 문방구까지 남은 동전
+func next_goals(sid: String, evo_names: Dictionary) -> Array:
+	var out: Array = []
+	var ng := mini(MAX_GRADE, int(data["clears"].get(sid, 0)) + 1)
+	var rw := first_clear_rewards(sid, ng, evo_names)
+	var line := tr("%s %d단계 깨기") % [STAGES[sid]["name"], ng]
+	if rw.size() > 0:
+		line += tr(" → ") + rw[0]
+	out.append(line)
+	var best_a := {}
+	var best_r := 0.0
+	for a in ACH:
+		if ach_done(a) or data["ach_claimed"].has(a["id"]):
+			continue
+		var r := float(stat(a["stat"])) / maxf(1.0, float(a["goal"]))
+		if r > best_r:
+			best_r = r
+			best_a = a
+	if not best_a.is_empty() and best_r >= 0.3:
+		out.append(tr("도장 '%s' %d/%d") % [best_a["name"], mini(stat(best_a["stat"]), int(best_a["goal"])), int(best_a["goal"])])
+	if affordable().is_empty():
+		var cheap := {}
+		var cc := 1 << 30
+		for it in SHOP:
+			var c := shop_cost(it["id"])
+			if c >= 0 and c < cc:
+				cc = c
+				cheap = it
+		if not cheap.is_empty():
+			out.append(tr("동전 %d개 더 모으면 '%s'") % [cc - int(data["coins"]), cheap["name"]])
+	return out
+
 # 받을 수 있는 숙제와 도장 보상을 한꺼번에 받아요 (받은 동전 합계)
 func claim_all() -> int:
 	var total := 0
