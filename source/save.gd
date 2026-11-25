@@ -389,7 +389,7 @@ func next_goals(sid: String, evo_names: Dictionary) -> Array:
 	var rw := first_clear_rewards(sid, ng, evo_names)
 	var line := tr("%s %d단계 깨기") % [STAGES[sid]["name"], ng]
 	if rw.size() > 0:
-		line += tr(" → ") + rw[0]
+		line += tr(" (깨면 %s)") % rw[0]
 	out.append(line)
 	var best_a := {}
 	var best_r := 0.0

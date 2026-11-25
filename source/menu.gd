@@ -251,7 +251,7 @@ func _home_goals() -> void:
 func _shop_tip(btn: Control) -> void:
 	if Save.data["runs"] == 0 or Save.tut_seen("shop_tip") or Save.affordable().is_empty():
 		return
-	var tip := L(tr("동전으로 강해져요! ↓"), 28, Color("#3a2148"), root, 0)
+	var tip := L(tr("동전으로 강해져요!"), 28, Color("#3a2148"), root, 0)
 	var sb: StyleBoxFlat = main._round_panel(Color("#ffdf3d"), 18, Color("#3a2148"), 4)
 	sb.content_margin_left = 14
 	sb.content_margin_right = 14

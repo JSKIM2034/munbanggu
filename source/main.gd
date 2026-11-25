@@ -5694,7 +5694,7 @@ func _end_game(win: bool) -> void:
 		for wid in MAINS:
 			evn[wid] = MAINS[wid]["evo"]
 		var goals := Save.next_goals(stage, evn)
-		var gtxt := tr("다음 목표") + "\n" + "\n".join(goals.map(func(g): return "· " + g))
+		var gtxt := tr("다음 목표") + "\n" + "\n".join(goals.map(func(g): return "- " + g))
 		var gl := _label(gtxt, 26, Color("#2f8f6a"), box_p, 0)
 		gl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 		gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
