@@ -109,6 +109,9 @@ const MAINS_KO := {
 	"top": {"name": "팽이", "icon": "팽", "col": "#e8524a", "partner": "pencil", "evo": "회오리 팽이",
 		"evo_desc": "큰 팽이 4개가 회오리를 일으켜 귀신을 빨아들이고 튕겨내요",
 		"desc": ["팽이를 던지면 바닥에서 돌며 귀신을 튕겨내요", "팽이 +1개", "피해 +40%", "더 오래 돌아요", "팽이 +1개, 더 크게"]},
+	"bb": {"name": "비비탄 총", "icon": "탄", "col": "#f2a93a", "partner": "nametag", "evo": "황금 연발총",
+		"evo_desc": "황금 비비탄이 쉬지 않고 쏟아져요! 절반은 옆 귀신에게 튕겨요",
+		"desc": ["약하지만 아주 빠르게 비비탄을 쏴요", "쏘는 속도 +30%", "피해 +40%", "2발씩 쏴요", "30% 확률로 옆 귀신에게 튕겨요"]},
 }
 var MAINS: Dictionary = Save.trd(MAINS_KO)
 const SUPPORTS_KO := {
@@ -119,7 +122,7 @@ const SUPPORTS_KO := {
 	"colorpaper": {"name": "색종이", "icon": "색", "col": "#6fd3ff", "desc": "색종이 별을 휙휙 던져요. 물줄기, 비행기, 콩알탄도 15% 빨라져요", "set": "plane"},
 	"magnifier": {"name": "돋보기", "icon": "돋", "col": "#ffb03f", "desc": "치명타 피해 +30%, 햇빛으로 귀신을 지져요", "set": "pop"},
 	"pencil": {"name": "필통", "icon": "필", "col": "#9b8cff", "desc": "줍는 거리 +40% (바닥에 원이 보여요)", "set": "top"},
-	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "하트 +1, 하트 방패가 한 번 막아 줘요", "set": ""},
+	"nametag": {"name": "명찰", "icon": "명", "col": "#ff5c7a", "desc": "하트 +1, 하트 방패가 한 번 막아 줘요", "set": "bb"},
 }
 var SUPPORTS: Dictionary = Save.trd(SUPPORTS_KO)
 var mains := {"gun": 1}          # 이름 -> 레벨
@@ -145,8 +148,9 @@ var face_dir := Vector3(0, 0, 1)
 var walk_phase := 0.0
 var run_amt := 0.0
 var recoil := 0.0
-var cd := {"gun": 0.0, "yoyo": 0.5, "rubber": 1.0, "plane": 0.3, "pop": 0.8, "top": 0.6}
+var cd := {"gun": 0.0, "yoyo": 0.5, "rubber": 1.0, "plane": 0.3, "pop": 0.8, "top": 0.6, "bb": 0.2}
 var tops: Array = []
+var bbs: Array = []
 var planes: Array = []
 var pops: Array = []
 var plane_mesh: ArrayMesh
@@ -221,6 +225,11 @@ func _ready() -> void:
 	rng.randomize()
 	var args := OS.get_cmdline_user_args()
 	auto_play = args.has("--auto")
+	hitch_log = args.has("--hitch")
+	if OS.has_feature("web"):
+		var q = JavaScriptBridge.eval("location.search")
+		if q is String and (q as String).contains("hitch"):
+			hitch_log = true
 	for a in args:
 		if a.begins_with("--shot="):
 			shot_mode = a.substr(7)
@@ -264,7 +273,7 @@ func _ready() -> void:
 		char_id = wc["char"]
 		day_mod = wc["mod"]
 		rng.seed = wc["seed"]
-	dg = grade + maxi(0, BOSS_ORDER.find(stage)) * (3 if weekly else STAGE_STEP)
+	dg = grade + maxi(0, BOSS_ORDER.find(stage)) * (1 if weekly else STAGE_STEP)   # 주간 도전: 장소마다 한 단계씩만 더 세게 (2026-11-25: 과학실이면 45초 만에 기절해서 낮춤)
 	for a in args:
 		if a.begins_with("--mod="):
 			day_mod = a.substr(6)
@@ -453,7 +462,29 @@ func _update_indicators() -> void:
 	for i in range(n, indicators.size()):
 		indicators[i][0].visible = false
 
+var prewarm_frames := 0
+func _prewarm_mm() -> void:
+	# 아직 한 번도 안 그린 효과(물방울, 별, 고리, 실내화, 비비탄 등)를 처음 몇 프레임 동안 땅 밑에 하나씩 그려 둬요.
+	# 처음 쓸 때 그래픽 준비(셰이더 컴파일)로 툭 끊기던 것을 판 시작 순간으로 옮겨요
+	if prewarm_frames <= 0:
+		if RenderingServer.frame_pre_draw.is_connected(_prewarm_mm):
+			RenderingServer.frame_pre_draw.disconnect(_prewarm_mm)
+		return
+	prewarm_frames -= 1
+	if player == null:
+		return
+	var p := player.position + Vector3(0, -1.5, 0)
+	for n in mm:
+		var m: MultiMesh = (mm[n] as MultiMeshInstance3D).multimesh
+		if m.visible_instance_count == 0 and m.instance_count > 0:
+			m.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3.ONE * 0.05), p))
+			m.set_instance_custom_data(0, Color(1, 1, 1, 0.5))
+			m.visible_instance_count = 1
+
 func _prewarm() -> void:
+	prewarm_frames = 4
+	if not RenderingServer.frame_pre_draw.is_connected(_prewarm_mm):
+		RenderingServer.frame_pre_draw.connect(_prewarm_mm)
 	# 처음 쓰는 효과의 셰이더가 게임 도중 준비되느라 멈칫하지 않게, 땅 밑에서 한 번씩 그려 둬요
 	_rubber_wave({"radius": 1.0, "dmg": 0.0, "knock": 0.0, "double": false}, 0.0)
 	rings[0]["node"].visible = true
@@ -1547,6 +1578,8 @@ func _make_multimeshes() -> void:
 	_mm("eshot", _shoe_mesh(), 120, true)
 	coin_fall_mesh = _coin_mesh()
 	_mm("gem", _ddakji_mesh(Color.WHITE, Color(1, 1, 1).darkened(0.25)), 300, true)
+	_mm("bb", merge([[_sph(0.09, -1, 8, 4), T(Vector3.ZERO), Color.WHITE], [_sph(0.03, -1, 6, 3), T(Vector3(-0.03, 0.045, 0.0)), Color(3, 3, 3)]]), 160, true)
+	_mm("bbtrail", _sph(1.0, -1, 8, 4), 160, false)
 	_mm("bullet", _sph(0.17, -1, 10, 5), 80, false)
 	(mm["bullet"].material_override as ShaderMaterial).shader = _fx_shader("""
 shader_type spatial;
@@ -1775,13 +1808,27 @@ func boss_name() -> String:
 func ease_x() -> float:
 	return clampf((dg - 1) / 9.0, 0.0, 1.0)
 func ease_hp() -> float:
-	return lerpf(EASE_HP0, 1.0, ease_x())
+	return ease_hp_for(dg)
 func ease_spawn() -> float:
 	return lerpf(EASE_SPAWN0, 1.0, ease_x())
 func ease_boss() -> float:
-	return lerpf(EASE_BOSS0, 1.0, ease_x())
+	return ease_boss_for(dg)
+# 귀신 체력 낮추기: 1~10단계는 한 단계마다 약 1.25배씩 천천히 세지고(1단계 x0.45 → 10단계 x3.4),
+# 그 뒤 20단계까지 차츰 원래 세기로 돌아가요 (2026-11-25: 6단계부터 너무 막혀서 완만하게)
+const EASE_HP_TBL := [0.45, 0.38, 0.355, 0.35, 0.35, 0.365, 0.39, 0.42, 0.455, 0.5]
 func ease_hp_for(d: int) -> float:
-	return lerpf(EASE_HP0, 1.0, clampf((d - 1) / 9.0, 0.0, 1.0))
+	if d <= 10:
+		return EASE_HP_TBL[maxi(d, 1) - 1]
+	return lerpf(0.5, 1.0, clampf((d - 10) / 10.0, 0.0, 1.0))
+func ease_boss_for(d: int) -> float:
+	if d <= 10:
+		return EASE_HP_TBL[maxi(d, 1) - 1] * 0.67
+	return lerpf(0.335, 1.0, clampf((d - 10) / 10.0, 0.0, 1.0))
+# 장소 고르기 화면에 보여 줄 귀신 체력 배수
+func hp_hint(sid: String, g: int) -> float:
+	var d := g + maxi(0, BOSS_ORDER.find(sid)) * STAGE_STEP
+	var x := float(d - 1)
+	return (1.0 + 0.45 * x + 0.02 * x * x) * STAGE_MULT[sid] * ease_hp_for(d)
 const EASE_HP0 := 0.45
 const EASE_SPAWN0 := 1.0   # 귀신 수는 줄이지 않아요 (초반이 너무 비어 보여서)
 const EASE_BOSS0 := 0.3
@@ -1825,8 +1872,8 @@ func _ddakji_base() -> Dictionary:
 	var l := lv("ddakji")
 	if evolved.has("ddakji"):
 		return {"count": 8, "dmg": 18.0, "radius": 2.6, "speed": 4.2, "knock": 6.0}
-	return {"count": [0, 2, 3, 3, 4, 5][l], "dmg": 8.0 * (1.4 if l >= 3 else 1.0), "radius": 1.7 * (1.2 if l >= 5 else 1.0),
-		"speed": 3.2 * (1.3 if l >= 5 else 1.0), "knock": 3.0}
+	return {"count": [0, 2, 3, 3, 4, 5][l], "dmg": 11.0 * (1.4 if l >= 3 else 1.0), "radius": 1.7 * (1.2 if l >= 5 else 1.0),
+		"speed": 3.2 * (1.3 if l >= 5 else 1.0), "knock": 2.0}
 
 func yoyo_stats() -> Dictionary:
 	var d := _yoyo_base()
@@ -1855,6 +1902,18 @@ func _rubber_base() -> Dictionary:
 		return {"cool": 1.4, "radius": 4.2, "dmg": 24.0, "knock": 15.0, "double": true}
 	return {"cool": 3.0 * (0.72 if l >= 4 else 1.0), "radius": 2.6 * (1.2 if l >= 2 else 1.0) * (1.2 if l >= 5 else 1.0),
 		"dmg": 12.0 * (1.4 if l >= 3 else 1.0), "knock": 13.0 if l >= 5 else 10.0, "double": false}
+
+func bb_stats() -> Dictionary:
+	var l := lv("bb")
+	var w := Save.shop_lv("w_bb")
+	var d: Dictionary
+	if evolved.has("bb"):
+		d = {"rate": 15.0, "dmg": 7.0, "shots": 2, "bounce": 0.5}
+	else:
+		d = {"rate": 7.0 * (1.3 if l >= 2 else 1.0), "dmg": 4.0 * (1.4 if l >= 3 else 1.0), "shots": 2 if l >= 4 else 1, "bounce": 0.3 if l >= 5 else 0.0}
+	d["dmg"] *= 1.0 + 0.12 * w
+	d["rate"] *= 1.0 + 0.04 * w
+	return d
 
 func top_stats() -> Dictionary:
 	var l := lv("top")
@@ -1923,7 +1982,13 @@ func _make_enemy(kind: String, pos: Vector3, elite := false) -> Dictionary:
 		return {}
 	var k: Dictionary = KINDS[kind]
 	var t := elapsed / RUN_TIME
-	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * grade_hp() * (1.0 + 0.35 * clampf(t * 2.0, 0.0, 1.0)) * ease_hp()
+	if hitch_log:
+		_hev("enemy:" + kind + ("*" if elite else ""))
+	var gm := grade_hp() * ease_hp()
+	if gm > 1.0:
+		# 높은 단계도 처음 1분 반은 순하게 시작해서 무기를 모을 틈을 줘요
+		gm = lerpf(1.0 + (gm - 1.0) * 0.35, gm, clampf(elapsed / 90.0, 0.0, 1.0))
+	var hpv: float = k["hp"] * (1.0 + t * 3.0 + t * t * 6.0) * gm * (1.0 + 0.35 * clampf(t * 2.0, 0.0, 1.0))
 	if kind == "boss":
 		hpv = k["hp"] * grade_hp() * ease_boss()
 	var e := {"pos": pos, "vel": Vector3.ZERO, "rot": 0.0, "kind": kind, "hp": hpv, "flash": 0.0,
@@ -2842,6 +2907,8 @@ func _fall_mat(coin: bool) -> StandardMaterial3D:
 	return fall_mats[coin]
 
 func _warn_circle(pos: Vector3, r: float, delay: float, drop := "") -> void:
+	if hitch_log:
+		_hev("warn:" + drop, false)
 	var mi := MeshInstance3D.new()
 	mi.mesh = _cyl(1.0, 0.02, -1, 32)
 	mi.material_override = _warn_mat(0.5)
@@ -3068,6 +3135,76 @@ func _update_drops(dt: float) -> void:
 			mi.queue_free()
 			drops.erase(d)
 
+# 비비탄 총: 약하지만 아주 빠르게 쏴요. 맞으면 톡! (진화하면 황금 비비탄, 옆 귀신에게 튕김)
+func _weapon_bb(dt: float, target: Dictionary) -> void:
+	if mains.has("bb"):
+		var bs := bb_stats()
+		cd["bb"] -= dt
+		if cd["bb"] <= 0.0 and not target.is_empty():
+			cd["bb"] = 1.0 / bs["rate"] * cd_mult()
+			var to: Vector3 = target["pos"] - player.position
+			to.y = 0.0
+			to = to.normalized()
+			var side := to.cross(Vector3.UP)
+			for i in int(bs["shots"]):
+				var dir := to.rotated(Vector3.UP, deg_to_rad(rng.randf_range(-5.0, 5.0)))
+				var start: Vector3 = player.position + to * 0.45 + side * (0.12 * (i - (bs["shots"] - 1) / 2.0) * 2.0) + Vector3(0, 0.6, 0)
+				bbs.append({"pos": start, "dir": dir, "life": 0.5, "dmg": bs["dmg"], "bounce": bs["bounce"], "skip": null})
+			if Engine.get_process_frames() % 2 == 0:
+				_glow(player.position + to * 0.5 + Vector3(0, 0.6, 0), to * 1.5, Color(1.0, 0.85, 0.4, 0.8), 0.12, 0.08)
+			_play("shoot", rng.randf_range(1.9, 2.2), -17.0)
+	var keep: Array = []
+	for b in bbs:
+		b["pos"] += b["dir"] * 22.0 * proj_speed() * dt
+		b["life"] -= dt
+		var done: bool = b["life"] <= 0.0
+		if not done:
+			for e in enemies:
+				if e["dead"] >= 0.0 or e == b["skip"]:
+					continue
+				if Vector2(e["pos"].x - b["pos"].x, e["pos"].z - b["pos"].z).length() < e["radius"] + 0.08:
+					_hit_enemy(e, b["dmg"], b["dir"], 1.2, true)
+					_part("drop", b["pos"], Vector3(rng.randf_range(-2, 2), 2.5, rng.randf_range(-2, 2)), Color(1.0, 0.8, 0.35, 0.9), 0.05, 0.25)
+					done = true
+					if b["bounce"] > 0.0 and rng.randf() < b["bounce"]:
+						# 톡! 가까운 다른 귀신에게 튕겨 가요
+						var nb := {}
+						var nd := 3.5
+						for e2 in enemies:
+							if e2 == e or e2["dead"] >= 0.0 or e2.has("prop"):
+								continue
+							var dd: float = (e2["pos"] as Vector3).distance_to(e["pos"])
+							if dd < nd:
+								nd = dd
+								nb = e2
+						if not nb.is_empty():
+							var nd3: Vector3 = (nb["pos"] as Vector3) - (e["pos"] as Vector3)
+							nd3.y = 0.0
+							b["dir"] = nd3.normalized()
+							b["life"] = 0.3
+							b["bounce"] = 0.0
+							b["skip"] = e
+							done = false
+					break
+		if not done:
+			keep.append(b)
+	bbs = keep
+	var m: MultiMesh = mm["bb"].multimesh
+	var tm: MultiMesh = mm["bbtrail"].multimesh
+	var n := mini(bbs.size(), 160)
+	var gold := evolved.has("bb")
+	for i in n:
+		var b: Dictionary = bbs[i]
+		var c: Color = Color(1.0, 0.82, 0.2) if gold else [Color("#ffd24a"), Color("#ff8a5c"), Color("#7fd6ff"), Color("#ffffff")][i % 4]
+		m.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * (1.3 if gold else 1.0)), b["pos"]))
+		m.set_instance_color(i, Color.WHITE)
+		m.set_instance_custom_data(i, Color(c.r, c.g, c.b, 0.25 if gold else 0.08))
+		var dir: Vector3 = b["dir"]
+		tm.set_instance_transform(i, Transform3D(Basis.looking_at(dir, Vector3.UP) * Basis.from_scale(Vector3(0.05, 0.05, 0.32)), b["pos"] - dir * 0.3))
+		tm.set_instance_custom_data(i, Color(1.0, 0.85, 0.4, 0.45) if gold else Color(1.0, 1.0, 0.9, 0.3))
+	m.visible_instance_count = n
+	tm.visible_instance_count = n
+
 # 팽이: 던지면 바닥에 떨어져 빙글빙글 돌며 귀신 쪽으로 미끄러지고, 부딪힌 귀신을 튕겨내요
 func _weapon_top(dt: float) -> void:
 	if mains.has("top"):
@@ -3208,6 +3345,7 @@ func _weapons(dt: float) -> void:
 			_glow(mz, face_dir * 2.0, Color(0.6, 0.9, 1.0, 0.9), 0.28 * gs["size"], 0.12)
 			_play("shoot" if not evolved.has("gun") else "blast", rng.randf_range(0.95, 1.1), -9.0)
 	_update_bullets(dt)
+	_weapon_bb(dt, target)
 	_weapon_colorpaper(dt)
 	_support_fx(dt)
 	_weapon_plane(dt)
@@ -3244,7 +3382,7 @@ func _weapons(dt: float) -> void:
 					continue
 				if Vector2(e["pos"].x - p.x, e["pos"].z - p.z).length() < e["radius"] + 0.25 * area_mult():
 					var last: float = e["hits"].get("dd", -9.0)
-					if elapsed - last > 0.45:
+					if elapsed - last > 0.35:
 						e["hits"]["dd"] = elapsed
 						_hit_enemy(e, ds["dmg"], e["pos"] - player.position, ds["knock"])
 	# 요요
@@ -3860,6 +3998,8 @@ func hitstop(d: float) -> void:
 	hitstop_left = maxf(hitstop_left, d)
 
 func _part(kind: String, pos: Vector3, vel: Vector3, col: Color, size: float, life: float, spin := 0.0, grav := 9.0, grow := 0.0) -> void:
+	if hitch_log:
+		_hev("part:" + kind)
 	if parts.size() > part_cap:
 		parts.pop_front()
 	var ax := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
@@ -4182,8 +4322,33 @@ func _set_low_fx() -> void:
 		if mm.has(n):
 			mm[n].visible = false
 var prof := [0,0,0,0,0,0]
+# 끊김 기록: --hitch (웹은 주소 끝에 ?hitch). 평소보다 훨씬 긴 프레임이 오면, 그 직전에 처음 생긴 일을 같이 적어요
+var hitch_log := false
+var hitch_ev: Array = []
+var hitch_seen := {}
+var hitch_last := 0
+var hitch_avg := 16.7
+var hitch_n := 0
+func _hev(tag: String, once := true) -> void:
+	if once:
+		if hitch_seen.has(tag):
+			return
+		hitch_seen[tag] = true
+	hitch_ev.append(tag)
+func _hitch_tick() -> void:
+	var now := Time.get_ticks_usec()
+	var ms := (now - hitch_last) / 1000.0
+	hitch_last = now
+	hitch_n += 1
+	if hitch_n > 30 and ms > maxf(50.0, hitch_avg * 2.5):
+		print("HITCH t=%.1f ms=%d avg=%.1f en=%d parts=%d nodes=%d ev=%s" % [elapsed, int(ms), hitch_avg, enemies.size(), parts.size(), get_child_count(), ",".join(hitch_ev)])
+	elif hitch_n > 5:
+		hitch_avg = lerpf(hitch_avg, ms, 0.05)
+	hitch_ev.clear()
 func _process(delta: float) -> void:
 	var dt := minf(delta, 0.05)
+	if hitch_log:
+		_hitch_tick()
 	if shot_mode != "":
 		shot_frames += 1
 		if shot_mode == "hero":
@@ -4197,7 +4362,7 @@ func _process(delta: float) -> void:
 				e["hp"] = 99999.0
 		if shot_mode == "sup":
 			move_dir = Vector3(1, 0, 0)
-		if (shot_mode == "sup" or shot_mode.begins_with("top") or shot_mode == "mission_in" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
+		if (shot_mode == "sup" or shot_mode.begins_with("top") or shot_mode.begins_with("bb") or shot_mode == "mission_in" or shot_mode.begins_with("pat_") or shot_mode.begins_with("gun_")) and shot_frames in [20, 35, 50, 70, 90]:
 			get_viewport().get_texture().get_image().save_png("/tmp/f_%s_%d.png" % [shot_mode, shot_frames])
 		if shot_mode.begins_with("pat_") and shot_frames % 4 == 0 and shot_frames <= 72:
 			get_viewport().get_texture().get_image().save_png("/tmp/pb_%s_%02d.png" % [shot_mode, shot_frames])
@@ -4765,6 +4930,8 @@ var banner_t := 0.0
 var boss_bar_bg: Panel
 var boss_bar: ColorRect
 func _banner(text: String, col: Color) -> void:
+	if hitch_log:
+		_hev("banner", false)
 	if banner_label == null:
 		banner_label = _label("", 46, col, hud)
 		banner_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
@@ -4896,6 +5063,8 @@ func _level_fx() -> void:
 		_glow(player.position + Vector3(cos(a) * 0.6, 0.1, sin(a) * 0.6), Vector3(0, rng.randf_range(4, 8), 0), Color(1.0, 0.9, 0.4, 0.9), 0.14, 0.7, 2.0)
 
 func _level_up() -> void:
+	if hitch_log:
+		_hev("levelup", false)
 	_level_fx()
 	paused = true
 	stick_index = -1
@@ -5206,6 +5375,8 @@ var evo_boom_done := false
 const EVO_LEN := 2.6
 
 func _evo_cinematic(id: String) -> void:
+	if hitch_log:
+		_hev("evo:" + id, false)
 	evo_id = id
 	evo_cine = EVO_LEN
 	evo_boom_done = false
@@ -5646,6 +5817,8 @@ var player_snd: Array = []
 var snd_last := {}
 var snd_stat := [0, 0]   # 낸 소리, 건너뛴 소리 (봇 기록용)
 func _play(name: String, pitch := 1.0, db := 0.0) -> void:
+	if hitch_log:
+		_hev("snd:" + name)
 	if not sounds.has(name) or not Save.opt("sfx"):
 		return
 	var minor := SND_GAP.has(name)
@@ -5782,6 +5955,28 @@ func _setup_shot() -> void:
 		xp_need = 99999
 		spawn_timer = 999.0
 		next_elite = 9999.0
+	if shot_mode == "bb" or shot_mode == "bb_evo":
+		# 비비탄 총 확인용
+		enemies.clear()
+		for i in 12:
+			var a := TAU * i / 12.0
+			var e := _make_enemy(["paper", "egg"][i % 2], Vector3(cos(a), 0, sin(a)) * rng.randf_range(3.0, 6.0))
+			e["hp"] = 99999.0
+			e["speed"] = 0.4
+			e["spawn"] = 1.0
+		mains.erase("gun")
+		main_order.erase("gun")
+		mains["bb"] = 5
+		main_order.append("bb")
+		supports["nametag"] = 1
+		support_order.append("nametag")
+		if shot_mode == "bb_evo":
+			evolved["bb"] = true
+		xp_need = 99999
+		spawn_timer = 999.0
+		next_elite = 9999.0
+		_refresh_ui()
+		_refresh_slots()
 	if shot_mode == "top" or shot_mode == "top_evo":
 		# 팽이 확인용
 		enemies.clear()

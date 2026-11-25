@@ -317,8 +317,7 @@ func _stage() -> void:
 		if not best.is_empty():
 			rec = (tr("클리어 %d:%02d") if best.get("win", false) else tr("최고 %d:%02d 버팀")) % [int(best["time"]) / 60, int(best["time"]) % 60]
 		var g0: int = sel[sid] - 1
-		var ez: float = main.ease_hp_for(g0 + 1) if sid == "ground" else 1.0
-		var hint := tr("  |  귀신 체력 x%.1f  동전 x%.1f") % [(1.0 + 0.45 * g0 + 0.02 * g0 * g0) * ez, 1.0 + 0.35 * g0]
+		var hint := tr("  |  귀신 체력 x%.1f  동전 x%.1f") % [main.hp_hint(sid, sel[sid]), 1.0 + 0.35 * g0]
 		var rl := L(rec + hint, 24, SUB, row)
 		rl.position = Vector2(30, 268)
 		main._fit(rl, 600)

@@ -69,6 +69,7 @@ const SHOP_KO := [
 	{"id": "w_pop", "name": "콩알탄 강화", "icon": "콩", "desc": "콩알탄 피해 +12%, 대기 -4%", "base": 60, "col": "#ff5c5c"},
 	{"id": "w_rubber", "name": "고무줄 강화", "icon": "줄", "desc": "고무줄 피해 +12%, 대기 -4%", "base": 50, "col": "#ff9a2f"},
 	{"id": "w_top", "name": "팽이 강화", "icon": "팽", "desc": "팽이 피해 +12%, 대기 -4%", "base": 50, "col": "#e8524a"},
+	{"id": "w_bb", "name": "비비탄 총 강화", "icon": "탄", "desc": "비비탄 피해 +12%, 연사 +4%", "base": 50, "col": "#f2a93a"},
 	{"id": "dmg", "name": "힘센 손", "icon": "힘", "desc": "모든 피해 +8%", "base": 30, "col": "#ff7a6b"},
 	{"id": "hp", "name": "튼튼 우유", "icon": "우", "desc": "최대 하트 +1", "base": 60, "max": 10, "col": "#ff5c7a"},
 	{"id": "speed", "name": "빠른 발", "icon": "발", "desc": "이동 속도 +5%", "base": 40, "col": "#f2c230"},
@@ -318,8 +319,8 @@ func claim_ach(id: String) -> int:
 
 # ---------- 진화 비법 ----------
 # 내 친구의 시작 무기 비법은 처음부터 알아요. 나머지 5개는 단계를 깰수록(모든 장소의 깬 단계 합) 하나씩 열려요
-const EVO_ORDER := ["gun", "ddakji", "plane", "yoyo", "pop", "rubber", "top"]
-const EVO_NEED := [1, 3, 5, 7, 10, 13]
+const EVO_ORDER := ["gun", "ddakji", "plane", "yoyo", "pop", "rubber", "top", "bb"]
+const EVO_NEED := [1, 3, 5, 7, 10, 13, 16]
 var evo_all := false   # 스크린샷/시험용: 모두 열기
 
 func clear_total() -> int:
