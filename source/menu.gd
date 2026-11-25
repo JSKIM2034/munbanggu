@@ -18,6 +18,7 @@ func _ready() -> void:
 		if a == "--rich":
 			# 스크린샷용 가짜 진행도 (저장하지 않아요)
 			Save.data["coins"] = 480
+			Save.data["runs"] = 12
 			Save.data["clears"] = {"ground": 6}
 			Save.data["stats"] = {"total_kills": 650, "best_combo": 120, "elite_kills": 6}
 			Save.data["shop"] = {"dmg": 2, "hp": 1}
@@ -36,6 +37,8 @@ func show_screen(name: String) -> void:
 			scroll_y[screen] = (sc as ScrollContainer).scroll_vertical
 		root.queue_free()
 	screen = name
+	if name == "shop" and not Save.tut_seen("shop_tip"):
+		Save.tut_mark("shop_tip")
 	root = Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -176,6 +179,7 @@ func _home() -> void:
 	who.offset_right = 300
 	who.offset_top = -420
 	who.offset_bottom = -370
+	_home_goals()
 	var go := B(tr("놀러 가기!"), Color("#ff9a2f"), 56)
 	go.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	go.offset_left = -280
@@ -207,9 +211,63 @@ func _home() -> void:
 		hb.add_child(b)
 		_dot(b, it[3])
 		var dest: String = it[1]
+		if dest == "shop":
+			_shop_tip(b)
 		b.pressed.connect(func():
 			main._play("pick", 1.0, -4.0)
 			show_screen(dest))
+
+# 첫 화면 "다음 목표": 지금 가장 앞선 장소에서 다음에 깰 단계와 그 보상, 거의 다 된 도장
+func _home_goals() -> void:
+	if Save.data["runs"] == 0:
+		return
+	var sid := "ground"
+	for s2 in Save.STAGE_ORDER:
+		if Save.stage_unlocked(s2):
+			sid = s2
+	var evn := {}
+	for wpn in main.mains_def():
+		evn[wpn] = main.mains_def()[wpn]["evo"]
+	var goals: Array = Save.next_goals(sid, evn).slice(0, 2)
+	var box := Panel.new()
+	box.add_theme_stylebox_override("panel", main._round_panel(Color(0.23, 0.13, 0.28, 0.82), 22, Color("#ffdf3d"), 4))
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	box.offset_left = -310
+	box.offset_right = 310
+	box.offset_top = -540
+	box.offset_bottom = -430
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(box)
+	var txt := "★ " + tr("다음 목표") + ": " + "\n".join(goals)
+	var gl := L(txt, 28, Color("#fff3b0"), box, 0)
+	gl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	gl.offset_left = 14
+	gl.offset_right = -14
+	main._fit_box(gl, 592, 100)
+
+# 첫 판 뒤 동전이 모였는데 아직 문방구에 안 가 봤으면, 문방구 버튼 위에 말풍선
+func _shop_tip(btn: Control) -> void:
+	if Save.data["runs"] == 0 or Save.tut_seen("shop_tip") or Save.affordable().is_empty():
+		return
+	var tip := L(tr("동전으로 강해져요! ↓"), 28, Color("#3a2148"), root, 0)
+	var sb: StyleBoxFlat = main._round_panel(Color("#ffdf3d"), 18, Color("#3a2148"), 4)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	tip.add_theme_stylebox_override("normal", sb)
+	tip.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	tip.offset_left = -345
+	tip.offset_right = -95
+	tip.offset_top = -250
+	tip.offset_bottom = -198
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	main._fit(tip, 230)
+	var tw := tip.create_tween().set_loops()
+	tw.tween_property(tip, "position:y", tip.position.y - 8, 0.5).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(tip, "position:y", tip.position.y, 0.5).set_trans(Tween.TRANS_SINE)
 
 func _standalone() -> bool:
 	if not OS.has_feature("web"):

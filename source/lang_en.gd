@@ -83,6 +83,7 @@ const EN := {
 	"비비탄 피해 +12%, 연사 +4%": "BB damage +12%, fire rate +4%",
 	"줄": "R",
 	"팽": "T",
+	"동전으로 강해져요! ↓": "Spend coins to get stronger! ↓",
 	"%s %d단계 깨기": "Clear %s Stage %d",
 	" → ": " → ",
 	"도장 '%s' %d/%d": "Stamp '%s' %d/%d",
