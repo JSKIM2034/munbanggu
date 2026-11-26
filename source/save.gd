@@ -138,6 +138,14 @@ var BESTIARY: Dictionary = trd(BESTIARY_KO)
 
 func _ready() -> void:
 	load_data()
+	_hook_page()
+	if OS.has_feature("web"):
+		# 저장 시험용 (주소 끝에 ?savetest): 열 때마다 숫자 하나를 올려 저장하고 콘솔에 찍어요
+		var q = JavaScriptBridge.eval("location.search", true)
+		if q is String and (q as String).contains("savetest"):
+			data["savetest"] = int(data.get("savetest", 0)) + 1
+			print("SAVETEST loaded=%d" % (int(data["savetest"]) - 1))
+			save_data()
 	var t := Translation.new()
 	t.locale = "en"
 	var en: Dictionary = preload("res://lang_en.gd").EN
@@ -221,11 +229,54 @@ func affordable() -> Array:
 			out.append(it)
 	return out
 
+# 웹: 파일(user://, 브라우저 IndexedDB)은 조금 뒤에 따로 옮겨 적혀서, 저장하자마자 창을 닫으면 빠질 수 있어요.
+# 그래서 같은 내용을 localStorage에도 바로 적어 두고, 불러올 때 둘 중 더 최근(saved_at) 것을 써요.
+const LS_KEY := "munbanggu_save"
+var _page_cb: JavaScriptObject = null
+
+func _read_file() -> Variant:
+	if not FileAccess.file_exists(PATH):
+		return null
+	var f := FileAccess.open(PATH, FileAccess.READ)
+	if f == null:
+		return null
+	return JSON.parse_string(f.get_as_text())
+
+func _read_ls() -> Variant:
+	if not OS.has_feature("web"):
+		return null
+	var t = JavaScriptBridge.eval("(function(){try{return localStorage.getItem('%s')||''}catch(e){return ''}})()" % LS_KEY, true)
+	if not (t is String) or t == "":
+		return null
+	return JSON.parse_string(t)
+
+func _write_ls(txt: String) -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("(function(){try{localStorage.setItem('%s', %s)}catch(e){}})()" % [LS_KEY, JSON.stringify(txt)], true)
+
+# 웹 창이 가려지거나 닫힐 때 한 번 더 저장해요.
+func _hook_page() -> void:
+	if not OS.has_feature("web") or _page_cb != null:
+		return
+	_page_cb = JavaScriptBridge.create_callback(_on_page_hide)
+	JavaScriptBridge.get_interface("window").addEventListener("pagehide", _page_cb)
+	JavaScriptBridge.get_interface("document").addEventListener("visibilitychange", _page_cb)
+
+func _on_page_hide(_args: Array) -> void:
+	save_data()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if not data.is_empty() and not evo_all:
+			save_data()
+
 func load_data() -> void:
 	data = _default()
-	if FileAccess.file_exists(PATH):
-		var f := FileAccess.open(PATH, FileAccess.READ)
-		var d = JSON.parse_string(f.get_as_text())
+	var d = _read_file()
+	var l = _read_ls()
+	if l is Dictionary and (not (d is Dictionary) or float(l.get("saved_at", 0)) > float(d.get("saved_at", 0))):
+		d = l
+	if true:
 		if d is Dictionary:
 			for k in d:
 				data[k] = d[k]
@@ -238,10 +289,13 @@ func load_data() -> void:
 	_refresh_daily()
 
 func save_data() -> void:
+	data["saved_at"] = Time.get_unix_time_from_system()
+	var txt := JSON.stringify(data)
 	var f := FileAccess.open(PATH, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify(data))
+		f.store_string(txt)
 		f.close()
+	_write_ls(txt)
 
 # ---------- 상점 ----------
 func shop_lv(id: String) -> int:
